@@ -39,13 +39,16 @@ class Whisper {
     this.roomPwd = roomPwd;
 
 
+    // {handle, keys:{publicKey, secretKey}}
     this.me = {handle: me.handle};
+    // {publicKey, handle}
     this.peers = [];
 
     this.transport = null;
 
     this.announceInterval = 100;
     this.announceHandle = null;
+    // {publicKey, date, hash}
     this.announces = [];
 
     // {from: public key b64, key: {publicKey: b64, secret: b64}, since: Date}
@@ -58,7 +61,7 @@ class Whisper {
 
     if(!crypter) { crypter = Nacl }
     this.crypter = crypter;
-    this.mycrypto = new crypter(me.keys);
+    this.mycrypto = new crypter(this.me.keys);
     this.mesharedcrypto = new crypter();
 
     if (!this.me.handle) {
@@ -179,6 +182,7 @@ class Whisper {
       console.log(msg)
       console.log(scleardata)
       console.log(this.announces)
+      return
     }
     this.announces[msg.from].lastSeen = new Date();
 		var cleardata = JSON.parse(scleardata);
@@ -240,16 +244,20 @@ class Whisper {
     if (from===bPub) {
       return;
     }
-    if(this.announces[from]) {
-      if (!this.announces[from].valid && !this.isBefore(this.announces[from].date, WhisperOpts.FailedAnnounceTimeout)){
-        return;
-      }
+    if (this.isBefore(msg.date, WhisperOpts.AnnounceTimeout)) {
+      return
     }
-    const wasValid = (this.announces[from] && this.announces[from].valid) || false;
-    this.announces[from] = msg;
-    const valid = msg.hash===this.mycrypto.hash(this.roomID, this.roomPwd, msg.date, msg.publicKey)
-    this.announces[from].valid = valid;
-    this.announces[from].lastSeen = new Date();
+    const valid = msg.hash===this.mycrypto.hash(this.roomID, this.roomPwd, msg.date, from)
+    if (!valid){
+      return
+    }
+    const wasValid = !!this.announces[from];
+    this.announces[from] = {
+      publicKey: msg.publicKey,
+      hash: msg.hash,
+      date: msg.date,
+      lastSeen: new Date(),
+    };
     if (valid && !wasValid) {
       this.login(from);
     }

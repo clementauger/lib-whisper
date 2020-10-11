@@ -7,12 +7,12 @@ class Nacl {
   constructor(keys){
     this.nonces = [];
     this.keys = {
-      publicKey: [],
-      secretKey: [],
-    };
-    this.uint8keys = {
       publicKey: "",
       secretKey: "",
+    };
+    this.uint8keys = {
+      publicKey: [],
+      secretKey: [],
     }
     if (keys) {
       this.set(keys)
@@ -27,7 +27,7 @@ class Nacl {
     this.keys.secretKey = nacl.util.encodeBase64(this.uint8keys.secretKey)
   }
 
-  set(k, sk) {
+  set(k) {
     try {
       this.uint8keys.publicKey = nacl.util.decodeBase64(k.publicKey)
       this.uint8keys.secretKey = nacl.util.decodeBase64(k.secretKey)
@@ -76,7 +76,10 @@ class Nacl {
     const bdata = nacl.util.decodeUTF8(data);
     const nonce = nacl.util.decodeBase64(nonceb64);
     const remotePubKey = nacl.util.decodeBase64(remotePubKeyB64);
-    const crypted = nacl.box(bdata, nonce, remotePubKey, this.uint8keys.secretKey)
+    const crypted = nacl.box(bdata, nonce, remotePubKey, this.uint8keys.secretKey.slice(0,32))
+    if (!crypted) {
+      return ""
+    }
     return nacl.util.encodeBase64(crypted);
   }
 
@@ -84,7 +87,10 @@ class Nacl {
     const data = nacl.util.decodeBase64(datab64);
     const nonce = nacl.util.decodeBase64(nonceb64);
     const remotePubKey = nacl.util.decodeBase64(remotePubKeyB64);
-    const msg = nacl.box.open(data, nonce, remotePubKey, this.uint8keys.secretKey);
+    const msg = nacl.box.open(data, nonce, remotePubKey, this.uint8keys.secretKey.slice(0,32));
+    if (!msg) {
+      return ""
+    }
     return nacl.util.encodeUTF8(msg);
   }
 

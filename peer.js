@@ -47,8 +47,8 @@ class Peer {
     this.transport.off("disconnect")
     this.transport.off("connect")
     this.transport.close()
-    this.whisper.close()
     this.whisper.trigger("disconnect");
+    this.whisper.close()
   }
 
   broadcast(){

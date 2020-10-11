@@ -40,11 +40,12 @@ describe('Crypto', function () {
       });
       it('should encrypt', function () {
         const c = new p()
+        const d = new p()
         const data = "hello"
         const nonce = c.newNonce()
         const remotePubKey = c.publicKey()
-        const encrypted = c.encrypt(data, nonce, remotePubKey)
-        const decrypted = c.decrypt(encrypted, nonce, remotePubKey)
+        const encrypted = c.encrypt(data, nonce, d.publicKey())
+        const decrypted = d.decrypt(encrypted, nonce, c.publicKey())
         assert.equal(data,decrypted)
       });
     });
