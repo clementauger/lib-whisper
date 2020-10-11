@@ -1,0 +1,28 @@
+{
+  "name": "lib-whisper",
+  "version": "1.0.0",
+  "description": "secure chat over any transport",
+  "main": "whisper.js",
+  "dependencies": {
+    "isomorphic-ws": "^4.0.1",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "jssha": "^3.1.2",
+    "ws": "^7.3.1"
+  },
+  "devDependencies": {
+    "browserify": "^17.0.0",
+    "mocha": "^8.1.3",
+    "ndjson": "^2.0.0",
+    "tinyify": "^3.0.0"
+  },
+  "scripts": {
+    "test": "mocha *.test.js {crypto,transport}/*.test.js",
+    "pack": "make build",
+    "ls": "make ls",
+    "min": "make min",
+    "dev-min": "make dev-min"
+  },
+  "author": "Clément Auger",
+  "license": "MIT"
+}
