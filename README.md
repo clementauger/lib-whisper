@@ -4,32 +4,32 @@ Secure chat library.
 
 # install
 
-`npm i git+https://github.com/clmentauger/lib-whisper`
+`npm i git+https://github.com/clementauger/lib-whisper.git`
 
 # Usage
 
 ```js
 const {
   Nacl
-} = require("./crypto/nacl")
+} = require("lib-whisper/crypto/nacl")
 const {
   NoCrypto
-} = require("./crypto/nocrypto")
+} = require("lib-whisper/crypto/nocrypto")
 const {
   ArrayTransportProvider
-} = require("./transport/array")
+} = require("lib-whisper/transport/array")
 const {
   TcpTransport, TcpTestServer
-} = require("./transport/tcp")
+} = require("lib-whisper/transport/tcp")
 const {
   WsTransport, WsTestServer
-} = require("./transport/ws")
+} = require("lib-whisper/transport/ws")
 const {
   Whisper, WhisperOpts
-} = require("./whisper")
+} = require("lib-whisper/whisper")
 const {
   Peer
-} = require("./peer")
+} = require("lib-whisper/peer")
 
 function waitGroup(done, n) {
   var i = 0;
