@@ -27,7 +27,7 @@ class Peer {
   connect(){
     var that = this;
     this.transport.on("connect", () => {
-      that.whisper.connect(this.transport)
+      that.whisper.connect(that.transport)
       that.whisper.trigger("connect");
       if (that.reconnect) {
         that.transport.once("reconnecting", ()=>{
@@ -43,12 +43,13 @@ class Peer {
   }
 
   disconnect(){
+    this.whisper.trigger("disconnect");
+    this.whisper.close()
     this.transport.off("reconnect")
+    this.transport.off("reconnecting")
     this.transport.off("disconnect")
     this.transport.off("connect")
     this.transport.close()
-    this.whisper.trigger("disconnect");
-    this.whisper.close()
   }
 
   broadcast(){

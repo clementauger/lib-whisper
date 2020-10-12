@@ -14,7 +14,7 @@ const {
   WsTransport, WsTestServer
 } = require("./transport/ws")
 const {
-  Whisper, WhisperOpts
+  Whisper, WhisperOpts, MsgType
 } = require("./whisper")
 const {
   Peer
@@ -35,10 +35,11 @@ function waitGroup(done, n) {
 }
 
 var assert = require('assert');
+var sport = 10000
 describe('Whisper', function () {
   describe('#demos', function () {
     it('should demo tcp transport, nacl encrypted, 2 peers session', function (done) {
-      var port = 10000
+      var port = sport++;
       var srv = TcpTestServer(port)
       srv.on("listening", ()=>{
 
@@ -51,12 +52,12 @@ describe('Whisper', function () {
           new Whisper(Nacl, "room id", "room pwd", {handle:"alice"}),
         );
 
-        bob.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-        })
-        alice.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-        })
+        // bob.on("debug", (info)=>{
+        //   console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        // })
+        // alice.on("debug", (info)=>{
+        //   console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        // })
         var wg = waitGroup(()=>{
           bob.disconnect()
           alice.disconnect()
@@ -64,20 +65,19 @@ describe('Whisper', function () {
           done();
         }, 2)
         bob.on("peer.accept", () => {
-          bob.broadcast({type:"message", data :"hello"})
-
           alice.once("message", (m)=>{
             alice.broadcast({type:"message", data :"yo"})
             wg()
           })
           bob.once("message", wg)
+          bob.broadcast({type:"message", data :"hello"})
         })
-        bob.connect()
         alice.connect()
+        bob.connect()
       })
     });
     it('should demo websocket transport, human readable, 2 peers session', function (done) {
-      var port = 11000
+      var port = sport++;
       var srv = WsTestServer(port)
       srv.on("listening", ()=>{
 
@@ -254,6 +254,81 @@ describe('Whisper', function () {
       })
       bob.connect()
       alice.connect()
+    });
+  });
+  describe('#bad acting', function () {
+    it('should ignore invalid announce message', function (done) {
+      this.timeout(5000);
+      var port = sport++;
+      var srv = TcpTestServer(port)
+      srv.on("listening", ()=>{
+        WhisperOpts.AnnounceTimeout = 2;
+        WhisperOpts.AnnounceInterval = 500;
+
+        const bob = new Peer(
+          new TcpTransport(port, "127.0.0.1"),
+          new Whisper(NoCrypto, "room id", "room pwd", {handle:"bob"}),
+        );
+        const alice = new Peer(
+          new TcpTransport(port, "127.0.0.1"),
+          new Whisper(NoCrypto, "room id", "room pwd", {handle:"alice"}),
+        );
+        const peter = new Peer(
+          new TcpTransport(port, "127.0.0.1"),
+          new Whisper(NoCrypto, "room id", "room pwd", {handle:"peter"}),
+        );
+
+        // bob.on("debug", (info)=>{
+        //   console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        // })
+        // alice.on("debug", (info)=>{
+        //   console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        // })
+        // peter.on("debug", (info)=>{
+        //   console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        // })
+        var wg = waitGroup(()=>{
+          console.log("alice bad acting")
+          // alice is bad acting,
+          // she slips trhough the peter's announce message.
+          const d = new Date();
+          const bPub = peter.whisper.mycrypto.publicKey()
+          const h = peter.whisper.mycrypto.hash(peter.whisper.roomID, peter.whisper.roomPwd, d.toISOString(), bPub)
+          const msg = {
+            "type": MsgType.Announce,
+            "publicKey": bPub,
+            "date": d,
+            "hash": h,
+          }
+          var wg = waitGroup(()=>{
+            bob.disconnect()
+            alice.disconnect()
+            peter.disconnect()
+            srv.close()
+            done();
+          }, 3)
+          peter.once("peer.accept", (peer) =>{
+            console.log("peter peer accept", peer)
+            wg()
+          })
+          alice.once("peer.accept", (peer) =>{
+            console.log("alice peer accept", peer)
+            wg()
+          })
+          bob.once("peer.accept", (peer) =>{
+            console.log("bob peer accept", peer)
+            wg()
+          })
+          console.log(msg);
+          // alice.transport.send(msg)
+          console.log("peter connect", peter.whisper.mycrypto.publicKey())
+          peter.connect()
+        }, 2)
+        alice.once("peer.accept", wg)
+        bob.once("peer.accept", wg)
+        bob.connect()
+        alice.connect()
+      })
     });
   });
 });

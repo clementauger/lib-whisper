@@ -52,7 +52,7 @@ class NoCrypto {
 
   hash(roomID, roomPwd, d, mePubKeyB64){
     const p = {
-      roomPwd, roomPwd, d, mePubKeyB64
+      roomID, roomPwd, d, mePubKeyB64
     }
     return JSON.stringify(p)
   }
@@ -67,15 +67,6 @@ class NoCrypto {
   decrypt(datab64, nonceb64, remotePubKeyB64) {
     const p = JSON.parse(datab64);
     return p.data;
-  }
-
-  sign(data) {
-    return JSON.stringify({data: data, publicKey: this.keys.publicKey});
-  }
-
-  verify(data, signb64, remotePubKeyB64) {
-    const s = JSON.parse(signb64)
-    return s.data===data && s.publicKey===remotePubKeyB64;
   }
 
   publicKey() {
