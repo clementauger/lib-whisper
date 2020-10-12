@@ -5,7 +5,6 @@ MsgType.Announce = "announce";
 MsgType.Login = "login";
 MsgType.LoginResponse = "login-res";
 MsgType.SendInfo = "send-info";
-MsgType.Accept = "accept";
 MsgType.Message = "message";
 
 var EvType = EvType || {};
@@ -110,7 +109,6 @@ class Whisper {
     this.msgDispatcher.on(MsgType.Login, this.onLogin.bind(this))
     this.msgDispatcher.on(MsgType.SendInfo, this.onSendInfo.bind(this))
     this.msgDispatcher.on(MsgType.LoginResponse, this.onLoginResponse.bind(this))
-    // this.msgDispatcher.on(MsgType.Accept, this.onAccept.bind(this))
     this.transport.on(EvType.Message, this.onTransportMessage.bind(this))
     this.transport.on(EvType.Error, this.onTransportError.bind(this))
 
@@ -125,7 +123,6 @@ class Whisper {
     this.msgDispatcher.removeAllListeners(MsgType.Login)
     this.msgDispatcher.removeAllListeners(MsgType.LoginResponse)
     this.msgDispatcher.removeAllListeners(MsgType.SendInfo)
-    // this.msgDispatcher.removeAllListeners(MsgType.Accept)
     if (this.transport) {
       this.transport.off(EvType.Message)
       this.transport.off(EvType.Error)
@@ -562,26 +559,6 @@ class Whisper {
         shared:this.mesharedcrypto.get()
       }
     );
-    // const bPub = this.mycrypto.publicKey();
-    // var data = {}
-    // data.type = MsgType.Accept
-    // data.token = token
-    // data.mytoken = this.newToken(peerPublicKey, MsgType.SendInfo).token
-    // data.handle = this.me.handle
-    // data.shared = this.mesharedcrypto.get()
-    // this.send(data, peerPublicKey);
-  }
-
-  // onAccept receives the accept message, the accept message must provide a previsouly
-  // generated SendInfo token.
-  // If the token is valid, the peer is add/updated.
-  onAccept(cleardata, data) {
-    const nego = this.validateToken(data.from, MsgType.SendInfo, cleardata.token)
-    if (!nego) {
-      return
-    }
-    this.peerAddUpdate(cleardata, data)
-    this.trigger(EvType.Negotiating, this.cntNegotiations())
   }
 
 	// send a private message.
@@ -774,5 +751,5 @@ function sortBySince(a, b) {
 }
 
 module.exports = {
-  Whisper, ChResults, EvType, MsgType, WhisperOpts, elapsed
+  Whisper, ChResults, EvType, MsgType, WhisperOpts
 }
