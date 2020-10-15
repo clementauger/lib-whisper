@@ -2,40 +2,41 @@
 var uid = 0;
 
 class NoCrypto {
-  constructor(keys){
+  constructor(){
     this.nonces = [];
     this.keys = {
       publicKey: "",
-      secretKey: "",
-    }
-    if (keys) {
-      this.set(keys)
-    }else {
-      this.init()
+      privateKey: "",
     }
   }
 
-  init(){
+  async create(keys){
     const id = uid++;
-    this.keys = {
+    return {
       publicKey: "publicKey#"+id,
-      secretKey: "secretKey#"+id,
+      privateKey: "privateKey#"+id,
     }
+  }
+  async init(keys){
+    if (keys) {
+      return this.set(keys)
+    }
+    return this.set(await this.create())
   }
 
   set(k) {
     this.keys.publicKey = k.publicKey
-    this.keys.secretKey = k.secretKey
+    this.keys.privateKey = k.privateKey
   }
 
   get() {
     return {
       publicKey: this.keys.publicKey,
-      secretKey: this.keys.secretKey,
+      privateKey: this.keys.privateKey,
     }
   }
 
-  newNonce(){
+  async newNonce(){
     if (this.nonces.length > 500) {
       this.nonces.slice(500, this.nonces.length-500)
     }
@@ -50,23 +51,38 @@ class NoCrypto {
     return ;
   }
 
-  hash(roomID, roomPwd, d, mePubKeyB64){
+  async hash(roomID, roomPwd, d, mePubKeyB64){
+    var args = Array.from(arguments).map((a)=>{
+      if (a.toISOString) {
+        return a.toISOString()
+      }
+      return a
+    });
+    return JSON.stringify(args)
+  }
+
+  async encrypt(data, remotePubKeyB64) {
     const p = {
-      roomID, roomPwd, d, mePubKeyB64
+      data, remotePubKeyB64
     }
     return JSON.stringify(p)
   }
 
-  encrypt(data, nonceb64, remotePubKeyB64) {
-    const p = {
-      data, nonceb64, remotePubKeyB64
-    }
-    return JSON.stringify(p)
-  }
-
-  decrypt(datab64, nonceb64, remotePubKeyB64) {
+  async decrypt(datab64, remotePubKeyB64) {
     const p = JSON.parse(datab64);
     return p.data;
+  }
+
+  async sign(data) {
+    return "signed"+this.keys.publicKey+data;
+  }
+
+  async verify(data, remotePubKey) {
+    var j = "signed"+remotePubKey;
+    if (data.startsWith(j)) {
+      return data.slice(j.length);
+    }
+    return false;
   }
 
   publicKey() {

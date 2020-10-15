@@ -1,6 +1,11 @@
 # lib-whisper
 
-Secure chat library.
+Secure chat library. NaCl, OpenPGP, Websocket, TCP, MsgPack, JSON.
+
+Not P2P, best suited for hosted tcp/ws socket. On Tor for example.
+
+Otherwise, it might support wild transports,
+like private message section of any website it is possible to automate.
 
 # install
 

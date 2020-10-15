@@ -1,88 +1,135 @@
-const {
-  Nacl
-} = require("./nacl")
-const {
-  NoCrypto
-} = require("./nocrypto")
+const { Nacl } = require("./nacl")
+const { NoCrypto } = require("./nocrypto")
+const { SaltShaker } = require("./saltshaker")
+const { Pgp } = require("./pgp")
 
+const openpgp = require('openpgp');
 var nacl = require('tweetnacl');
 nacl.util = require('tweetnacl-util');
 
 var assert = require('assert');
-describe('Crypto', function () {
-  var providers = {Nacl, NoCrypto}
+describe('Crypto', async function () {
   const k = nacl.box.keyPair();
-  var keys = {
-    Nacl: {
-        publicKey: nacl.util.encodeBase64(k.publicKey),
-        secretKey: nacl.util.encodeBase64(k.secretKey),
+  // const k2 = nacl.sign.keyPair();
+  const k2 = nacl.box.keyPair();
+  const k3 =  await openpgp.generateKey({
+    userIds: [{ name: 'Jon Smith', email: 'jon@example.com' }],
+    curve: 'ed25519',
+    passphrase: ''
+  });
+  const tests = {
+    "Nacl":{
+      provider: Nacl,
+      original: k,
+      keys: {
+          publicKey: nacl.util.encodeBase64(k.publicKey),
+          privateKey: nacl.util.encodeBase64(k.secretKey),
+      }
     },
-    NoCrypto: {
-        publicKey: "a",
-        secretKey: "b",
+
+    "NoCrypto":{
+      provider: NoCrypto,
+      keys: {
+          publicKey: "a",
+          privateKey: "b",
+      }
     },
+
+    "SaltShaker":{
+      provider: SaltShaker,
+      original: k2,
+      keys: {
+          publicKey: nacl.util.encodeBase64(k2.publicKey),
+          privateKey: nacl.util.encodeBase64(k2.secretKey),
+      },
+    },
+
+    "Pgp":{
+      provider: Pgp,
+      original: k3,
+      keys: {
+          publicKey: k3.publicKeyArmored,
+          privateKey: k3.privateKeyArmored,
+      }
+    },
+
   }
-  Object.keys(providers).map((n)=>{
-    const p = providers[n];
-    const key = keys[n];
-    describe('#'+n, function () {
-      it('should create new keys', function () {
-        const c = new p()
+  Object.keys(tests).map((name)=>{
+    const provider = tests[name].provider;
+    // const original = tests[n].original;
+    const keys = tests[name].keys;
+    describe('#'+name, function () {
+      it('should create new keys', async function () {
+        const c = new provider()
+        await c.init()
         assert.notEqual(c.keys.publicKey.length, 0)
-        assert.notEqual(c.keys.secretKey.length, 0)
+        assert.notEqual(c.keys.privateKey.length, 0)
       });
-      it('should use given keys', function () {
-        const c = new p(key)
+      it('should use given keys', async function () {
+        const c = new provider()
+        await c.init(keys)
         assert.notEqual(c.keys.publicKey.length, 0)
-        assert.notEqual(c.keys.secretKey.length, 0)
-        assert.deepEqual(c.keys.publicKey, key.publicKey)
-        assert.deepEqual(c.keys.secretKey, key.secretKey)
+        assert.notEqual(c.keys.privateKey.length, 0)
+        assert.deepEqual(c.keys.publicKey, keys.publicKey)
+        assert.deepEqual(c.keys.privateKey, keys.privateKey)
       });
-      it('should encrypt', function () {
-        const c = new p()
-        const d = new p()
+      it('should encrypt', async function () {
+        const c = new provider()
+        await c.init()
+        const d = new provider()
+        await d.init()
         const data = "hello"
-        const nonce = c.newNonce()
         const remotePubKey = c.publicKey()
-        const encrypted = c.encrypt(data, nonce, d.publicKey())
-        const decrypted = d.decrypt(encrypted, nonce, c.publicKey())
-        assert.equal(data,decrypted)
+        const encrypted = await c.encrypt(data, d.publicKey())
+        const decrypted = await d.decrypt(encrypted, c.publicKey())
+        assert.equal(data, decrypted)
+      });
+      it('should sign', async function () {
+        const c = new provider()
+        await c.init()
+        const d = new provider()
+        await d.init()
+        const data = "hello"
+        const remotePubKey = c.publicKey()
+        const signed = await c.sign(data)
+        const unsigned = await d.verify(signed, c.publicKey())
+        assert.equal(data, unsigned)
       });
     });
   })
 });
 describe('Nacl', function () {
   describe('#new', function () {
-    it('should generate binary64 encoded keys', function () {
+    it('should generate binary64 encoded keys', async function () {
       const c = new Nacl()
+      await c.init()
       assert.notEqual(c.keys.publicKey.length, 0)
-      assert.notEqual(c.keys.secretKey.length, 0)
+      assert.notEqual(c.keys.privateKey.length, 0)
     });
-    it('should set binary64 encoded keys', function () {
+    it('should set binary64 encoded keys', async function () {
       const k = nacl.box.keyPair();
       const key = {
           publicKey: nacl.util.encodeBase64(k.publicKey),
-          secretKey: nacl.util.encodeBase64(k.secretKey),
+          privateKey: nacl.util.encodeBase64(k.secretKey),
       }
-      const c = new Nacl(key)
+      const c = new Nacl()
+      await c.init(key)
       assert.notEqual(c.keys.publicKey.length, 0)
-      assert.notEqual(c.keys.secretKey.length, 0)
+      assert.notEqual(c.keys.privateKey.length, 0)
       assert.deepEqual(c.keys.publicKey, key.publicKey)
-      assert.deepEqual(c.keys.secretKey, key.secretKey)
+      assert.deepEqual(c.keys.privateKey, key.privateKey)
     });
-    it('should set uint8 keys', function () {
-      const k = nacl.box.keyPair();
-      const key = {
-          publicKey: nacl.util.encodeBase64(k.publicKey),
-          secretKey: nacl.util.encodeBase64(k.secretKey),
-      }
-      const c = new Nacl(k)
-      assert.notEqual(c.uint8keys.publicKey.length, 0)
-      assert.notEqual(c.uint8keys.secretKey.length, 0)
-      assert.deepEqual(c.uint8keys.publicKey, k.publicKey)
-      assert.deepEqual(c.uint8keys.secretKey, k.secretKey)
-      assert.deepEqual(c.keys.publicKey, key.publicKey)
-      assert.deepEqual(c.keys.secretKey, key.secretKey)
-    });
+    // it('should set uint8 keys', function () {
+    //   const k = nacl.box.keyPair();
+    //   const key = {
+    //       publicKey: nacl.util.encodeBase64(k.publicKey),
+    //       privateKey: nacl.util.encodeBase64(k.secretKey),
+    //   }
+    //   const c = new Nacl(k)
+    //   assert.deepEqual(c.uint8keys.publicKey, k.publicKey)
+    //   assert.deepEqual(c.uint8keys.secretKey, k.secretKey)
+    //   assert.deepEqual(c.keys.publicKey, key.publicKey)
+    //   assert.deepEqual(c.keys.privateKey, key.privateKey)
+    // });
   });
 });

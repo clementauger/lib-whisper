@@ -1,4 +1,4 @@
-FILES=whisper.js crypto/nacl.js crypto/nocrypto.js transport/array.js transport/tcp.js transport/ws.js
+FILES=whisper.js crypto/{nacl,pgp,nocrypto,saltshaker}.js transport/{codec,array,tcp,ws}.js
 
 test:
 	npm run test
@@ -7,7 +7,16 @@ build:
 	npm run dev-min
 	npm run ls
 ls:
-	ls -alh whisper.${npm_package_version}.*
+	ls -hlG whisper.${npm_package_version}.*
+
+	$(eval SIZE=$(shell zip -qr - whisper.${npm_package_version}.dev.min.js | wc -c))
+	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
+	@echo "whisper.${npm_package_version}.dev.min.js => ${SIZE}kb"
+
+	$(eval SIZE=$(shell zip -qr - whisper.${npm_package_version}.min.js | wc -c))
+	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
+	@echo "whisper.${npm_package_version}.min.js => ${SIZE}kb"
+
 min:
 	browserify -p tinyify ${FILES} -o whisper.${npm_package_version}.min.js
 dev-min:

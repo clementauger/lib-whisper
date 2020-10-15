@@ -33,8 +33,20 @@ var WhisperOpts = {
   FailedAnnounceTimeout: 60 * 2,
 }
 
+const {
+  NoCrypto
+} = require("./crypto/nocrypto")
+
 class Whisper {
-  constructor (crypter, roomID, roomPwd, me) {
+  constructor ({
+    crypter = NoCrypto,
+    roomID = "",
+    roomPwd = "",
+    me = {
+      handle: "",
+      keys: {publicKey: "", secretKey: ""}
+    },
+  }) {
     this.events = new EventEmitter();
     this.msgDispatcher = new EventEmitter();
 
@@ -61,9 +73,8 @@ class Whisper {
     // pubkey=>status
     this.peerStatus = {};
 
-    if(!crypter) { crypter = Nacl }
     this.crypter = crypter;
-    this.mycrypto = new crypter(this.me.keys);
+    this.mycrypto = new crypter();
     this.mesharedcrypto = new crypter();
 
     if (!this.me.handle) {
@@ -98,12 +109,20 @@ class Whisper {
 
   // connect on given transport. It implements connects, send, on, off.
   // It triggers connect, error, disconnect, message
-  connect (transport) {
+  async connect (transport) {
     if (this.transport){
       this.close();
     }
     this.transport = transport;
-    this.sharedKeys.push({from: this.mycrypto.publicKey(), key: this.mesharedcrypto.get(), since: new Date()});
+    if (!this.mycrypto.publicKey().length) {
+      await this.mycrypto.init(this.me.keys)
+      await this.mesharedcrypto.init()
+    }
+    this.sharedKeys.push({
+      from: this.mycrypto.publicKey(),
+      key: this.mesharedcrypto.get(),
+      since: new Date(),
+    });
 
     this.msgDispatcher.on(MsgType.Announce, this.onAnnounce.bind(this))
     this.msgDispatcher.on(MsgType.Login, this.onLogin.bind(this))
@@ -112,7 +131,10 @@ class Whisper {
     this.transport.on(EvType.Message, this.onTransportMessage.bind(this))
     this.transport.on(EvType.Error, this.onTransportError.bind(this))
 
-    this.announceHandle = setInterval(this.announce.bind(this), WhisperOpts.AnnounceInterval)
+    var that = this;
+    this.announceHandle = setInterval(async ()=>{
+      await that.announce()
+    }, WhisperOpts.AnnounceInterval)
     this.announce()
   }
 
@@ -143,8 +165,11 @@ class Whisper {
   }
 
   // onTransportMessage decodes input message and triggers the related event handler.
-  onTransportMessage (message) {
+  async onTransportMessage (message) {
     var msg = {};
+    if (typeof message !=="object" || !(message instanceof Object)) {
+      console.error("got non object from transport", message)
+    }
     if (typeof message ==="object" || message instanceof Object) {
       msg = message
     } else {
@@ -172,12 +197,19 @@ class Whisper {
       }
 		}
     if (!foundkey) {
+      // note that because the transport is a broadcaster,
+      // it is expected to receive messages that are not for us.
+      // Though, sometims, it is useful to print them out,
+      // but it will quickly become extremely annoying with an
+      // increasing number of peers.
+			// console.error(this.me.handle, " decrypt key not found for ", msg)
       // this._debug({handle: this.me.handle, type: "no-keys", dir: "rcv", data: msg})
       return
     }
 
-    var k = new this.crypter(foundkey)
-    const scleardata = k.decrypt(msg.data, msg.nonce, msg.from)
+    var k = new this.crypter()
+    await k.init(foundkey)
+    const scleardata = await k.decrypt(msg.data, msg.from)
 		if (!scleardata) {
 			console.error(this.me.handle, "msg not decrypted ", msg, "with key", foundkey)
 			return
@@ -205,15 +237,15 @@ class Whisper {
       this.msgDispatcher.emit(cleardata.type, cleardata, msg);
       return
     }
-    this.trigger(cleardata.type, cleardata, msg, peer);
+    this.trigger(cleardata.type, cleardata, msg);
   }
 
 	// announce sends an announce message containing
   // an hash proving we can read associated room.
-	announce () {
+	async announce () {
     const d = new Date();
     const bPub = this.mycrypto.publicKey()
-    const h = this.mycrypto.hash(this.roomID, this.roomPwd, d.toISOString(), bPub)
+    const h = await this.mycrypto.hash(this.roomID, this.roomPwd, d, bPub)
     const msg = {
       "type": MsgType.Announce,
       "publicKey": bPub,
@@ -254,7 +286,7 @@ class Whisper {
 	// onAnnounce handles peers announces.
   // It verifies the given hash, if it is valid,
   // it triggers a login sequence once every WhisperOpts.LoginRetry seconds.
-	onAnnounce (msg) {
+	async onAnnounce (msg) {
     const bPub = this.mycrypto.publicKey()
     const from = msg.publicKey
     if (from===bPub) {
@@ -263,7 +295,8 @@ class Whisper {
     if (isBefore(msg.date, WhisperOpts.AnnounceTimeout)) {
       return
     }
-    const valid = msg.hash===this.mycrypto.hash(this.roomID, this.roomPwd, msg.date, from)
+    const meH = await this.mycrypto.hash(this.roomID, this.roomPwd, msg.date, from);
+    const valid = msg.hash===meH;
     if (!valid){
       return
     }
@@ -321,6 +354,7 @@ class Whisper {
     if (!this.tokens[publicKey][typ][token]) {
       return false
     }
+    this.trigger(EvType.Negotiating, this.cntNegotiations())
     const curNego = this.tokens[publicKey][typ][token];
     delete(this.tokens[publicKey][typ][token])
     if (this.tokens[publicKey][typ].length<1){
@@ -389,22 +423,23 @@ class Whisper {
 
 	// login sends a login packet. It provides a hash of the room id / pwd,
   // and a token that the remote peer can use to answer.
-	login (withPublicKey) {
+	async login (withPublicKey) {
     const bPub = this.mycrypto.publicKey();
     const tok = this.newToken(withPublicKey, MsgType.Login)
     const msg = {
       "type": MsgType.Login,
-      "hash": this.mycrypto.hash(this.roomID, this.roomPwd, tok.token, tok.type, bPub),
+      "hash": await this.mycrypto.hash(this.roomID, this.roomPwd, tok.token, tok.type, bPub),
       "token":tok.token,
     }
     this.trigger(EvType.Negotiating, this.cntNegotiations())
-    this.send(msg, withPublicKey)
+    await this.send(msg, withPublicKey)
 	}
 
 	// login handles login packets. it verifies for the packet.hash, if it is valid,
   // it sends the send-info. Otherwise it issues a login-response error packet.
-	onLogin (cleardata, data) {
-    const a = cleardata.hash===this.mycrypto.hash(this.roomID, this.roomPwd, cleardata.token, MsgType.Login, data.from)
+	async onLogin (cleardata, data) {
+    const meH = await this.mycrypto.hash(this.roomID, this.roomPwd, cleardata.token, MsgType.Login, data.from)
+    const a = cleardata.hash===meH
     if (!a) {
       this.issueLoginResponse(data.from, cleardata.token, ChResults.InvalidHash)
       return
@@ -414,17 +449,17 @@ class Whisper {
 
   // issueSendInfo sends a send-info packet.
   // Token is provided by the previous login message.
-  issueSendInfo(peerPublicKey, loginToken) {
+  async issueSendInfo(peerPublicKey, loginToken) {
     const bPub = this.mycrypto.publicKey();
     var data = {}
     data.type = MsgType.SendInfo
     const token = this.newToken(peerPublicKey, MsgType.SendInfo)
     data.mytoken = token.token
     data.token = loginToken
-    data.hash = this.mycrypto.hash(this.roomID, this.roomPwd, loginToken, token.token, token.type, bPub)
+    data.hash = await this.mycrypto.hash(this.roomID, this.roomPwd, loginToken, token.token, token.type, bPub)
     data.handle = this.me.handle
     data.shared = this.mesharedcrypto.get()
-    this.send(data, peerPublicKey);
+    await this.send(data, peerPublicKey);
   }
 
 	// onSendInfo handles send-info packets.
@@ -432,14 +467,14 @@ class Whisper {
   // generated Login token.
   // if the packet.hash is valid, it tries to insert/update the peer.
   // if the peer is accepted, it issues an accept message to the peer.
-	onSendInfo(cleardata, data) {
+	async onSendInfo(cleardata, data) {
     const nego = this.validateToken(data.from, MsgType.Login, cleardata.token)
     if (!nego) {
       return
     }
-    this.trigger(EvType.Negotiating, this.cntNegotiations())
 
-    const a = cleardata.hash===this.mycrypto.hash(this.roomID, this.roomPwd, nego.token, cleardata.mytoken, MsgType.SendInfo, data.from);
+    const meH = await this.mycrypto.hash(this.roomID, this.roomPwd, nego.token, cleardata.mytoken, MsgType.SendInfo, data.from);
+    const a = cleardata.hash===meH
     if (!a) {
       return
     }
@@ -503,13 +538,13 @@ class Whisper {
   // issueLoginResponse sends a login-response packet.
   // Token is provided by the previous login message.
   // It notifies the remote peer its status for us.
-  issueLoginResponse(peerPublicKey, token, result, opts) {
+  async issueLoginResponse(peerPublicKey, token, result, opts) {
     const bPub = this.mycrypto.publicKey();
     var data = opts || {}
     data.type = MsgType.LoginResponse
     data.token = token
     data.result = result
-    this.send(data, peerPublicKey);
+    await this.send(data, peerPublicKey);
   }
 
   // issueInvalidPeerHandle sends a login-reponse.
@@ -562,13 +597,12 @@ class Whisper {
   }
 
 	// send a private message.
-	send(msg, b64ToPubKey) {
+	async send(msg, b64ToPubKey) {
     if (this.transport){
       this._debug({handle: this.me.handle, type: "message", dir: "snd", data: {to:b64ToPubKey,data:msg}})
-  		const nonce = this.mycrypto.newNonce();
-  		const data = this.mycrypto.encrypt(JSON.stringify(msg), nonce, b64ToPubKey);
+  		const data = await this.mycrypto.encrypt(JSON.stringify(msg), b64ToPubKey);
   		const bPub = this.mycrypto.publicKey();
-  		const err = this.transport.send({ "data": data, "nonce": nonce, "from": bPub, "to": b64ToPubKey });
+  		const err = this.transport.send({ "data": data, "from": bPub, "to": b64ToPubKey });
       if (err){
         console.error(this.me.handle, this.mycrypto.publicKey(), " transport err:", err)
       }
@@ -576,7 +610,7 @@ class Whisper {
 	}
 
 	// broadcast, encrypt and authenticate a message using a sharedKey.
-	broadcast (msg) {
+	async broadcast (msg) {
     const oldest = this.peers.filter(iAccepted.bind(this)).sort(sortBySince).pop();
     if (!oldest) {
       console.error(this.me.handle, "could not find a peer to send message")
@@ -592,11 +626,11 @@ class Whisper {
       return
     }
 		const bPub = this.mycrypto.publicKey();
-		var crypto = new this.crypter(key.key);
-		const nonce = crypto.newNonce();
-		const data = this.mycrypto.encrypt(JSON.stringify(msg), nonce, crypto.publicKey());
+		var crypto = new this.crypter();
+    await crypto.init(key.key)
+		const data = await this.mycrypto.encrypt(JSON.stringify(msg), crypto.publicKey());
     this._debug({handle: this.me.handle, type: "message", dir: "snd", data: {to:key.key.publicKey,data:data}})
-		this.transport.send({ "data": data, "nonce": nonce, "from": bPub, "to": key.key.publicKey });
+    this.transport.send({ "data": data, "from": bPub, "to": key.key.publicKey });
 	}
 
 	// broadcastDirect send a private message to each accepted peer.
@@ -673,8 +707,9 @@ class Whisper {
     this.peers.filter( isPubKey(bPub) ).map( (p) => {
       p.handle = newHandle;
     })
+    var that = this;
     this.peers.filter( notPubKey(bPub) ).map( (p) => {
-      this.login(p.publicKey)
+      that.login(p.publicKey)
     })
     return true
   }

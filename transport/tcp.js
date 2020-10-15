@@ -1,16 +1,22 @@
 const net = require('net');
 const EventEmitter = require('events');
-const ndjson = require('ndjson')
+const Codec = require("./codec")
 
 const { Err } = require('./errors');
 const { EvType } = require('./events.type');
 
 class TcpTransport {
-  constructor (port, addr, reconnectTimeout) {
+  constructor ({
+    port = 0,
+    addr = "",
+    codec = Codec.Json,
+    reconnectTimeout = 0,
+  }) {
     this.events = new EventEmitter();
     this.reconnectTimeout = reconnectTimeout;
     this.reconnectHandle = null;
     this.socket = null;
+    this.codec = codec;
     this.port = port;
     this.addr = addr;
   }
@@ -47,14 +53,18 @@ class TcpTransport {
     }
     var that = this;
     this.socket = new net.Socket();
-    // this.socket.setNoDelay(true);
-    this.socket.setEncoding('utf8');
-    // this.socket.on('data', function(data) {
-    //   that.trigger(EvType.Message, data);
-    // });
-    this.socket.pipe(ndjson.parse()).on("data", function(data) {
+    if(!this.codec.binary) {
+      this.socket.setEncoding('utf8');
+    }
+    this.encoder = this.codec.encoder();
+    this.encoder.pipe(this.socket)
+    const decoder = this.codec.decoder();
+    this.encoder.on("error", console.error);
+    decoder.on("error", console.error);
+    decoder.on("data", (data)=>{
       that.trigger(EvType.Message, data);
     })
+    this.socket.pipe(decoder)
     this.socket.on('connect', function() {
       that.trigger(EvType.Connect);
     });
@@ -77,12 +87,14 @@ class TcpTransport {
 
   // send a message
   send (msg) {
-		if (!this.socket)
+		if (!this.socket){
       return Err.SocketClosed;
-
+    }
 		try {
-			this.socket.write(JSON.stringify(msg)+"\n");
+			this.encoder.write(msg);
 		} catch (e) {
+      console.error(e)
+      this.trigger("error", e)
       return e
 		};
     return null;
@@ -95,19 +107,21 @@ class TcpTransport {
   }
 
   close () {
+    this.encoder.end();
     this.socket.destroy();
     this.socket = null;
   }
 }
 
 
-const TcpTestServer = (port) => {
+const TcpTestServer = ({port, binary}) => {
   var conns = [];
   var server = net.createServer();
   server.on('connection', (conn)=>{
     conns.push(conn)
-    // conn.setNoDelay(true);
-    conn.setEncoding('utf8');
+    if(!binary) {
+      conn.setEncoding('utf8');
+    }
     conn.on('data', (d)=>{
       conns.filter((c)=>{return c!==conn}).map((c)=>{c.write(d)})
     });

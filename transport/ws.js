@@ -1,15 +1,21 @@
 const EventEmitter = require('events');
 const WebSocket = require('isomorphic-ws');
+const Codec = require("./codec")
 
 const { Err } = require('./errors');
 const { EvType } = require('./events.type');
 
 class WsTransport {
-  constructor (url, reconnectTimeout) {
+  constructor ({
+    url = "",
+    codec = Codec.Json,
+    reconnectTimeout = 0,
+  }) {
     this.events = new EventEmitter();
     this.reconnectTimeout = reconnectTimeout;
     this.reconnectHandle = null;
     this.url = url;
+    this.codec = codec;
     this.ws = null;
   }
 
@@ -50,7 +56,13 @@ class WsTransport {
       that.trigger(EvType.Connect);
     };
     this.ws.onmessage = (m) => {
-      that.trigger(EvType.Message, m.data);
+      try{
+        const d = that.codec.decode(m.data)
+        that.trigger(EvType.Message, d);
+      }catch(e){
+        console.error(e)
+        that.trigger("error", e)
+      }
     };
     this.ws.onerror = (e) => {
       that.trigger(EvType.Error, e);
@@ -74,21 +86,29 @@ class WsTransport {
       }
     };
     return this
-  };
+  }
 
   // send a message
   send (msg) {
 		if (!this.ws || this.ws.readyState == WebSocket.CLOSED || this.ws.readyState == WebSocket.CLOSING)
       return Err.SocketClosed;
+    if(msg===undefined){throw "e";return}
+    try{
+      const d = this.codec.encode(msg)
+      this.ws.send(d);
+    }catch(e){
+      console.error(e)
+      this.trigger("error", e)
+    }
 
-		try {
-			if (typeof (msg) == "object") {
-				msg = JSON.stringify(msg);
-			}
-			this.ws.send(msg);
-		} catch (e) {
-      return e
-		};
+		// try {
+		// 	if (typeof (msg) == "object") {
+		// 		msg = JSON.stringify(msg);
+		// 	}
+		// 	this.ws.send(msg);
+		// } catch (e) {
+    //   return e
+		// };
     return null;
   }
 

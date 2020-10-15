@@ -81,16 +81,16 @@ class ArrayTransport {
     if (msgs.length){
       this.lastMsgID = msgs[msgs.length-1].id;
       msgs.map( (m) => {
-        this.trigger(EvType.Message, m.data);
+        try{
+          this.trigger(EvType.Message, JSON.parse(m.data));
+        }catch(e){console.error(e)}
       })
     }
   };
 
   // send a message
   send (msg) {
-    if (typeof (msg) == "object") {
-      msg = JSON.stringify(msg);
-    }
+    msg = JSON.stringify(msg);
     this.transport.publish(this.id, msg)
     return null;
   }
