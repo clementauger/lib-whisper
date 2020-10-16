@@ -1,9 +1,7 @@
-const { Nacl } = require("./crypto/nacl")
-const { NoCrypto } = require("./crypto/nocrypto")
 const { ArrayTransportProvider } = require("./transport/array")
 const { TcpTransport, TcpTestServer } = require("./transport/tcp")
 const { WsTransport, WsTestServer } = require("./transport/ws")
-const { Whisper, WhisperOpts } = require("./whisper")
+const { Whisper, WhisperOpts, Crypters } = require("./whisper")
 const { Peer } = require("./peer")
 const Codec = require("./transport/codec");
 
@@ -33,8 +31,8 @@ srv.on("listening", ()=>{
     return new Peer(
       new TcpTransport({port, addr, codec}),
       new Whisper({
-        crypter: NoCrypto, roomID: "room id", roomPwd: "room pwd",
-        me: {handle: handle,},
+        crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
+        me: {handle},
       }),
     );
   }
@@ -99,7 +97,7 @@ srv.on("listening", ()=>{
 
   bob && bob.on("message", (m, p)=>{ console.log("bob rcv:", m, "from", p.handle); })
   alice && alice.on("message", (m, p)=>{ console.log("alice rcv:", m, "from", p.handle); })
-  peter.on("message", (m, p)=>{ console.log("peter rcv:", m, "from", p.handle); })
+  peter && peter.on("message", (m, p)=>{ console.log("peter rcv:", m, "from", p.handle); })
   dup && dup.on("message", (m, p)=>{ console.log("dup rcv:", m, "from", p.handle); })
 
   bob && bob.on("peer.accept", ()=>{bob.broadcast({type:"message", data :"hi"}) })

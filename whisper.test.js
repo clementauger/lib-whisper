@@ -1,11 +1,7 @@
-const { NoCrypto } = require("./crypto/nocrypto")
-const { Nacl } = require("./crypto/nacl")
-const { Pgp } = require("./crypto/pgp")
-const { SaltShaker } = require("./crypto/saltshaker")
 const { ArrayTransportProvider } = require("./transport/array")
 const { TcpTransport, TcpTestServer } = require("./transport/tcp")
 const { WsTransport, WsTestServer } = require("./transport/ws")
-const { Whisper, WhisperOpts, MsgType } = require("./whisper")
+const { Whisper, WhisperOpts, MsgType, Crypters, SumHash } = require("./whisper")
 const { Peer } = require("./peer")
 const Codec = require("./transport/codec");
 
@@ -39,7 +35,7 @@ describe('Whisper', function () {
           return new Peer(
             new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Nacl, roomID: "room id", roomPwd: "room pwd",
+              crypter: Crypters.Nacl, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
             }),
           );
@@ -85,7 +81,7 @@ describe('Whisper', function () {
           return new Peer(
             new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Nacl, roomID: "room id", roomPwd: "room pwd",
+              crypter: Crypters.Nacl, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
             }),
           );
@@ -131,7 +127,7 @@ describe('Whisper', function () {
           return new Peer(
             new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: SaltShaker, roomID: "room id", roomPwd: "room pwd",
+              crypter: Crypters.SaltShaker, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
             }),
           );
@@ -169,6 +165,7 @@ describe('Whisper', function () {
     it('should demo tcp transport, Pgp encrypted, 2 peers session', function (done) {
       const port = sport++;
       const debug = false;
+      this.timeout(5000)
       const codec = Codec.Json;
       const srv = TcpTestServer({port, binary: codec.binary})
       srv.on("listening", ()=>{
@@ -177,7 +174,7 @@ describe('Whisper', function () {
           return new Peer(
             new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Pgp, roomID: "room id", roomPwd: "room pwd",
+              crypter: Crypters.Pgp, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
             }),
           );
@@ -224,7 +221,7 @@ describe('Whisper', function () {
           return new Peer(
             new WsTransport({url, codec}),
             new Whisper({
-              crypter: NoCrypto, roomID: "room id", roomPwd: "room pwd",
+              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
             }),
           );
@@ -274,7 +271,7 @@ describe('Whisper', function () {
           return new Peer(
             new WsTransport({url, codec}),
             new Whisper({
-              crypter: NoCrypto, roomID: "room id", roomPwd: "room pwd",
+              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
             }),
           );
@@ -320,7 +317,7 @@ describe('Whisper', function () {
         return new Peer(
           tr.endPoint().connect(),
           new Whisper({
-            crypter: NoCrypto, roomID: "room id", roomPwd: "room pwd",
+            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
             me: {handle: handle,},
           }),
         );
@@ -368,7 +365,7 @@ describe('Whisper', function () {
         return new Peer(
           tr.endPoint().connect(),
           new Whisper({
-            crypter: NoCrypto, roomID: "room id", roomPwd: "room pwd",
+            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
             me: {handle: handle,},
           }),
         );
@@ -456,7 +453,7 @@ describe('Whisper', function () {
         return new Peer(
           tr.endPoint().connect(),
           new Whisper({
-            crypter: NoCrypto, roomID: "room id", roomPwd: "room pwd",
+            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
             me: {handle: handle,},
           }),
         );
@@ -510,7 +507,7 @@ describe('Whisper', function () {
           return new Peer(
             new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: NoCrypto, roomID: "room id", roomPwd: "room pwd",
+              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
             }),
           );
@@ -531,19 +528,12 @@ describe('Whisper', function () {
           })
         }
 
-        var wg = waitGroup(()=>{
+        var wg = waitGroup(async ()=>{
           console.log("alice bad acting")
           // alice is bad acting,
           // she slips trhough the peter's announce message.
-          const d = new Date();
-          const bPub = peter.whisper.mycrypto.publicKey()
-          const h = peter.whisper.mycrypto.hash(peter.whisper.roomID, peter.whisper.roomPwd, d.toISOString(), bPub)
-          const msg = {
-            "type": MsgType.Announce,
-            "publicKey": bPub,
-            "date": d,
-            "hash": h,
-          }
+          peter.whisper.me.keys = await peter.whisper.crypter.create()
+          const msg = await peter.whisper._announcePkt();
           var wg = waitGroup(()=>{
             bob.disconnect()
             alice.disconnect()
@@ -565,7 +555,7 @@ describe('Whisper', function () {
           })
           console.log(msg);
           // alice.transport.send(msg)
-          console.log("peter connect", peter.whisper.mycrypto.publicKey())
+          console.log("peter connect", peter.whisper.publicKey())
           peter.connect()
         }, 2)
         alice.once("peer.accept", wg)

@@ -24,10 +24,10 @@ class Peer {
     return this.whisper.off(ev, handle, opts);
   }
 
-  connect(){
+  async connect(){
     var that = this;
-    this.transport.on("connect", () => {
-      that.whisper.connect(that.transport)
+    this.transport.on("connect", async () => {
+      await that.whisper.connect(that.transport)
       that.whisper.trigger("connect");
       if (that.reconnect) {
         that.transport.once("reconnecting", ()=>{
@@ -39,7 +39,7 @@ class Peer {
         })
       }
     })
-    return this.transport.connect()
+    return await this.transport.connect()
   }
 
   disconnect(){
