@@ -1,8 +1,7 @@
 const { ArrayTransportProvider } = require("./transport/array")
-const { LibP2PTransport } = require("./transport/libp2p")
 const { TcpTransport, TcpTestServer } = require("./transport/tcp")
 const { WsTransport, WsTestServer } = require("./transport/ws")
-const { Whisper, MsgType, Crypters, SumHash } = require("./whisper")
+const { Whisper, WhisperOpts, MsgType, Crypters, SumHash } = require("./whisper")
 const { Peer } = require("./peer")
 const Codec = require("./transport/codec");
 
@@ -210,50 +209,6 @@ describe('Whisper', function () {
         bob.connect()
       })
     });
-    it('should demo libp2p transport, Pgp encrypted, 2 peers session', function (done) {
-      const port = sport++;
-      const debug = false;
-      this.timeout(10000)
-      const codec = Codec.Json;
-
-      function newPeer(handle){
-        return new Peer(
-          new LibP2PTransport({codec}),
-          new Whisper({
-            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-            me: {handle: handle,},
-          }),
-        );
-      }
-      const bob = newPeer("bob");
-      const alice = newPeer("alice");
-
-      if(debug){
-        bob.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-        })
-        alice.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-        })
-      }
-
-      var wg = waitGroup(()=>{
-        bob.disconnect()
-        alice.disconnect()
-        done();
-      }, 2)
-      alice.once("message", wg)
-      bob.once("message", wg)
-
-      var wg2 = waitGroup(()=>{
-        bob.broadcast({type:"message", data :"hello"})
-        alice.broadcast({type:"message", data :"yo"})
-      }, 2)
-      bob.once("peer.accept", wg2)
-      alice.once("peer.accept", wg2)
-      alice.connect()
-      bob.connect()
-    });
     it('should demo websocket transport, human readable, 2 peers session', function (done) {
       const port = sport++;
       const codec = Codec.Json;
@@ -403,112 +358,7 @@ describe('Whisper', function () {
       alice.connect()
     });
     it('should demo all events', function (done) {
-      const port = sport++;
       const debug = false;
-      const codec = Codec.MsgPack;
-      const srv = TcpTestServer({port, binary: codec.binary})
-      srv.on("listening", ()=>{
-        function newPeer(handle){
-          return new Peer(
-            new TcpTransport({port, addr, codec}),
-            new Whisper({
-              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
-              opts: {AnnounceTimeout: 1, AnnounceInterval: 300},
-            }),
-          );
-        }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
-
-        if(debug){
-          bob.on("debug", (info)=>{
-            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-          })
-          alice.on("debug", (info)=>{
-            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-          })
-        }
-
-        bob.on("disconnect", ()=>{
-          console.log("bob disconnect")
-        })
-        alice.on("disconnect", ()=>{
-          console.log("alice disconnect")
-        })
-
-        bob.on("negotiating", (n)=>{
-          console.log("bob negotiating", n)
-        })
-        alice.on("negotiating", (n)=>{
-          console.log("alice negotiating", n)
-        })
-        bob.on("error", (err)=>{
-          console.log("bob error", err)
-        })
-        alice.on("error", (err)=>{
-          console.log("alice error", err)
-        })
-        bob.on("renew.peerhandle", (peer, oldHandle)=>{
-          console.log("bob peer", oldHandle, "renames to", peer.handle)
-        })
-        alice.on("renew.peerhandle", (peer, oldHandle)=>{
-          console.log("alice peer", oldHandle, "renames to", peer.handle)
-        })
-        bob.on("renew.myhandle", (newHandle)=>{
-          console.log("bob renames to", newHandle)
-        })
-        alice.on("renew.myhandle", (newHandle)=>{
-          console.log("alice renames to", newHandle)
-        })
-        bob.on("accept", ()=>{
-          console.log("bob accept")
-        })
-        alice.on("accept", ()=>{
-          console.log("alice accept")
-        })
-        bob.on("peer.accept", (p)=>{
-          console.log("bob peer.accept", p.handle)
-        })
-        alice.on("peer.accept", (p)=>{
-          console.log("alice peer.accept", p.handle)
-        })
-        bob.on("peer.leave", (p)=>{
-          console.log("bob peer.leave", p)
-        })
-        alice.on("peer.leave", (p)=>{
-          console.log("alice peer.leave", p)
-        })
-        bob.once("peer.accept", (p)=>{
-          console.log("BOB broadcast")
-          bob.broadcast({"type": "message", "data":"hello"})
-        })
-        alice.once("message", (m)=>{
-          console.log("alice message", m)
-          assert.equal(m.data, "hello")
-        })
-        alice.once("peer.accept", (p)=>{
-          bob.once("renew.peerhandle", async () => {
-            await bob.disconnect();
-            console.log("bob left")
-            setTimeout( async () => {
-              await alice.disconnect();
-              srv.close()
-              done();
-            }, 2500)
-          })
-          alice.changeHandle("tomate")
-        })
-        console.log("start")
-        this.timeout(10000)
-        bob.connect()
-        alice.connect()
-
-      })
-    });
-    it('should timeout', function (done) {
-      const debug = false;
-      this.timeout(5000);
       const tr = new ArrayTransportProvider(100)
 
       function newPeer(handle){
@@ -517,7 +367,94 @@ describe('Whisper', function () {
           new Whisper({
             crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
             me: {handle: handle,},
-            opts: {AnnounceTimeout: 1},
+          }),
+        );
+      }
+      const bob = newPeer("bob");
+      const alice = newPeer("alice");
+
+      if(debug){
+        bob.on("debug", (info)=>{
+          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        })
+        alice.on("debug", (info)=>{
+          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        })
+      }
+
+      bob.on("disconnect", ()=>{
+        console.log("bob disconnect")
+      })
+      alice.on("disconnect", ()=>{
+        console.log("alice disconnect")
+      })
+
+      bob.on("negotiating", (n)=>{
+        console.log("bob negotiating", n)
+      })
+      alice.on("negotiating", (n)=>{
+        console.log("alice negotiating", n)
+      })
+      bob.on("error", (err)=>{
+        console.log("bob error", err)
+      })
+      alice.on("error", (err)=>{
+        console.log("alice error", err)
+      })
+      bob.on("renew.peerhandle", (peer, oldHandle)=>{
+        console.log("bob peer", oldHandle, "renames to", peer.handle)
+      })
+      alice.on("renew.peerhandle", (peer, oldHandle)=>{
+        console.log("alice peer", oldHandle, "renames to", peer.handle)
+      })
+      bob.on("renew.myhandle", (newHandle)=>{
+        console.log("bob renames to", newHandle)
+      })
+      alice.on("renew.myhandle", (newHandle)=>{
+        console.log("alice renames to", newHandle)
+      })
+      bob.on("accept", ()=>{
+        console.log("bob accept")
+      })
+      alice.on("accept", ()=>{
+        console.log("alice accept")
+      })
+      bob.on("peer.accept", (p)=>{
+        console.log("bob peer.accept", p.handle)
+      })
+      alice.on("peer.accept", (p)=>{
+        console.log("alice peer.accept", p.handle)
+      })
+      bob.once("peer.accept", (p)=>{
+        bob.broadcast({"type": "message", "data":"hello"})
+      })
+      alice.once("message", (m)=>{
+        console.log("alice message", m)
+        assert.equal(m.data, "hello")
+      })
+      alice.once("peer.accept", (p)=>{
+        bob.once("renew.peerhandle", () => {
+          bob.disconnect();
+          alice.disconnect();
+          done();
+        })
+        alice.changeHandle("tomate")
+      })
+      bob.connect()
+      alice.connect()
+    });
+    it('should timeout', function (done) {
+      const debug = false;
+      this.timeout(5000);
+      WhisperOpts.AnnounceTimeout = 1;
+      const tr = new ArrayTransportProvider(100)
+
+      function newPeer(handle){
+        return new Peer(
+          tr.endPoint().connect(),
+          new Whisper({
+            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
+            me: {handle: handle,},
           }),
         );
       }
@@ -563,6 +500,8 @@ describe('Whisper', function () {
       const codec = Codec.Json;
       const srv = TcpTestServer({port, binary: codec.binary})
       srv.on("listening", ()=>{
+        WhisperOpts.AnnounceTimeout = 2;
+        WhisperOpts.AnnounceInterval = 500;
 
         function newPeer(handle){
           return new Peer(
@@ -570,7 +509,6 @@ describe('Whisper', function () {
             new Whisper({
               crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
               me: {handle: handle,},
-              opts: {AnnounceTimeout: 2, AnnounceInterval: 500},
             }),
           );
         }
@@ -615,7 +553,8 @@ describe('Whisper', function () {
             console.log("bob peer accept", peer)
             wg()
           })
-          alice.transport.send(msg)
+          console.log(msg);
+          // alice.transport.send(msg)
           console.log("peter connect", peter.whisper.publicKey())
           peter.connect()
         }, 2)

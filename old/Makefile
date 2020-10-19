@@ -1,17 +1,17 @@
-FILES=whisper.js crypto/{nacl,pgp,nocrypto,saltshaker}.js transport/{codec,array,libp2p,ws}.js
+FILES=whisper.js crypto/{nacl,pgp,nocrypto,saltshaker}.js transport/{codec,array,tcp,ws}.js
 
 test:
 	npm run test
 build:
 	npm run min
-# npm run dev-min # it does not finish since i added libp2p
+	npm run dev-min
 	npm run ls
 ls:
 	ls -hlG whisper.${npm_package_version}.*
 
-# $(eval SIZE=$(shell zip -qr - whisper.${npm_package_version}.dev.min.js | wc -c))
-# $(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
-# @echo "whisper.${npm_package_version}.dev.min.js => ${SIZE}kb"
+	$(eval SIZE=$(shell zip -qr - whisper.${npm_package_version}.dev.min.js | wc -c))
+	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
+	@echo "whisper.${npm_package_version}.dev.min.js => ${SIZE}kb"
 
 	$(eval SIZE=$(shell zip -qr - whisper.${npm_package_version}.min.js | wc -c))
 	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))

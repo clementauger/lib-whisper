@@ -1,26 +1,9 @@
-# lib-whisper
-
-Secure chat library.
-
-It transports data over libp2p, tcp/websocket servers.
-
-It encodes data using MsgPack, JSON.
-
-It encrypts messages using NaCl, OpenPGP.
-
-# install
-
-`npm i git+https://github.com/clementauger/lib-whisper.git`
-
-# Usage
-
-```js
-const { ArrayTransportProvider } = require("lib-whisper/transport/array")
-const { TcpTransport, TcpTestServer } = require("lib-whisper/transport/tcp")
-const { WsTransport, WsTestServer } = require("lib-whisper/transport/ws")
-const { Whisper, WhisperOpts, Crypters } = require("lib-whisper/whisper")
-const { Peer } = require("lib-whisper/peer")
-const Codec = require("lib-whisper/transport/codec");
+const { ArrayTransportProvider } = require("./transport/array")
+const { TcpTransport, TcpTestServer } = require("./transport/tcp")
+const { WsTransport, WsTestServer } = require("./transport/ws")
+const { Whisper, WhisperOpts, Crypters } = require("./whisper")
+const { Peer } = require("./peer")
+const Codec = require("./transport/codec");
 
 function waitGroup(done, n) {
   var i = 0;
@@ -49,7 +32,7 @@ srv.on("listening", ()=>{
       new TcpTransport({port, addr, codec}),
       new Whisper({
         crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-        me: {handle: handle,},
+        me: {handle},
       }),
     );
   }
@@ -127,4 +110,3 @@ srv.on("listening", ()=>{
   peter && peter.connect()
   dup && dup.connect()
 })
-```

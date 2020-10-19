@@ -1,3 +1,4 @@
+
 const EventEmitter = require('events');
 
 class Peer {
@@ -41,14 +42,14 @@ class Peer {
     return await this.transport.connect()
   }
 
-  async disconnect(){
+  disconnect(){
+    this.whisper.trigger("disconnect");
+    this.whisper.close()
     this.transport.off("reconnect")
     this.transport.off("reconnecting")
-    this.whisper.trigger("disconnect");
-    await this.whisper.close()
     this.transport.off("disconnect")
     this.transport.off("connect")
-    await this.transport.close()
+    this.transport.close()
   }
 
   broadcast(){

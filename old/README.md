@@ -1,12 +1,9 @@
 # lib-whisper
 
-Secure chat library.
+Secure chat library. NaCl, OpenPGP, Websocket, TCP, MsgPack, JSON.
 
-It transports data over libp2p, tcp/websocket servers.
-
-It encodes data using MsgPack, JSON.
-
-It encrypts messages using NaCl, OpenPGP.
+Not P2P direct connections, best suited for hosted tcp/ws socket,
+yet completely private chat system, the server can't read messages,
 
 # install
 

@@ -107,9 +107,7 @@ class TcpTransport {
   }
 
   close () {
-    if (this.encoder) {
-      this.encoder.end();
-    }
+    this.encoder.end();
     this.socket.destroy();
     this.socket = null;
   }

@@ -1,7 +1,4 @@
 const EventEmitter = require('events');
-const {
-  Crypters, SumHash
-} = require("./crypto.js")
 
 var MsgType = MsgType || {};
 MsgType.Announce = "announce";
@@ -36,6 +33,10 @@ var WhisperOpts = {
   FailedAnnounceTimeout: 60 * 2,
 }
 
+const {
+  Crypters, SumHash
+} = require("./crypto.js")
+
 class Whisper {
   constructor ({
     crypter = Crypters.NoCrypto,
@@ -45,14 +46,12 @@ class Whisper {
       handle: "",
       keys: {publicKey: "", secretKey: ""}
     },
-    opts = WhisperOpts,
   }) {
     this.events = new EventEmitter();
     this.msgDispatcher = new EventEmitter();
 
     this.roomID = roomID;
     this.roomPwd = roomPwd;
-    this.opts = opts;
 
 
     // {handle, keys:{publicKey, secretKey}}
@@ -76,6 +75,8 @@ class Whisper {
     this.peerStatus = {};
 
     this.crypter = crypter;
+    // this.mycrypto = new crypter();
+    // this.mesharedcrypto = new crypter();
 
     if (!this.me.handle) {
       this.me.handle = makeid(5)
@@ -118,11 +119,7 @@ class Whisper {
   }
 
   // connect on given transport. It implements connects, send, on, off.
-  // The transport triggers connect, error, disconnect, message events.
-  // Upon connection, existing transport is closed,
-  // new keys are created if they don t exist,
-  // our shared key is added to the list of known keys,
-  // and the announce interval is started.
+  // It triggers connect, error, disconnect, message
   async connect (transport) {
     if (this.transport){
       this.close();
@@ -134,6 +131,10 @@ class Whisper {
     if (!this.shared) {
       this.shared = await this.crypter.create();
     }
+    // if (!this.publicKey().length) {
+    //   await this.mycrypto.init(this.me.keys)
+    //   await this.mesharedcrypto.init()
+    // }
     this.sharedKeys.push({
       from: this.publicKey(),
       key: this.shared,
@@ -147,16 +148,16 @@ class Whisper {
     this.transport.on(EvType.Message, this.onTransportMessage.bind(this))
     this.transport.on(EvType.Error, this.onTransportError.bind(this))
 
-    if (transport.addDHTAnnounce) {
-      transport.addDHTAnnounce( await SumHash(this.roomID, this.roomPwd) )
-    }
-
-    this.announceHandle = setInterval(this.announce.bind(this), this.opts.AnnounceInterval)
+    var that = this;
+    this.announceHandle = setInterval(async ()=>{
+      await that.announce()
+    }, WhisperOpts.AnnounceInterval)
     this.announce()
   }
 
   // close the underlying transport.
-  async close () {
+  // triggers diconnect event.
+  close () {
     this.msgDispatcher.removeAllListeners(MsgType.Announce)
     this.msgDispatcher.removeAllListeners(MsgType.Login)
     this.msgDispatcher.removeAllListeners(MsgType.LoginResponse)
@@ -164,10 +165,6 @@ class Whisper {
     if (this.transport) {
       this.transport.off(EvType.Message)
       this.transport.off(EvType.Error)
-      if (this.transport.rmDHTAnnounce) {
-        const h = await SumHash(this.roomID, this.roomPwd)
-        this.transport.rmDHTAnnounce(h)
-      }
     }
     this.transport = null;
     this.sharedKeys = []
@@ -175,7 +172,7 @@ class Whisper {
     clearInterval(this.announceHandle)
   }
 
-  // onTransportError triggers this error handler.
+  // onTransportError handles transport error.
   onTransportError (err) {
     this.trigger(EvType.Error, err)
   }
@@ -185,14 +182,6 @@ class Whisper {
   }
 
   // onTransportMessage decodes input message and triggers the related event handler.
-  // every input message must provide a signature (sign field).
-  // If the message provides a type fields, it must be an announce packet and be in clear text.
-  // Otherwise the message is decrypted, using the corresponding private key of the to field.
-  // The decrypted message is an object with a type field.
-  // If the decrypted message has a type Login, LoginResponse or SendInfo,
-  // it is handled by the internal logic.
-  // Otherwise, it is emitted on this whisper instance only if the peer emitter
-  // is accepted.
   async onTransportMessage (message) {
     var msg = {};
     if (typeof message !=="object" || !(message instanceof Object)) {
@@ -243,16 +232,21 @@ class Whisper {
     }
     this._debug({handle: this.me.handle, type: "message", dir: "rcv", data: cleardata})
 
+    if (cleardata.type===MsgType.Message){
+      const peer = this.peers.filter(isPubKey(msg.from)).shift();
+      if (peer) {
+        this.trigger(cleardata.type, cleardata, peer);
+      }
+      return
+    }
+
     var getListeners = this.msgDispatcher.listeners || this.msgDispatcher.getListeners;
     getListeners = getListeners.bind(this.msgDispatcher)
     if (getListeners(cleardata.type).length>0){
       this.msgDispatcher.emit(cleardata.type, cleardata, msg);
       return
     }
-    const peer = this.peers.filter(isPubKey(msg.from)).shift();
-    if (peer) {
-      this.trigger(cleardata.type, cleardata, peer);
-    }
+    this.trigger(cleardata.type, cleardata, msg);
   }
 
 	// _announcePkt creates an announce packet.
@@ -291,7 +285,7 @@ class Whisper {
       if (!announce){
         return false;
       }
-      if (!isBefore(announce.lastSeen, this.opts.AnnounceTimeout*2)) {
+      if (!isBefore(announce.lastSeen, WhisperOpts.AnnounceTimeout*2)) {
         return true;
       }
       this.sharedKeys = this.sharedKeys.filter( notFrom(from) )
@@ -305,15 +299,14 @@ class Whisper {
 
 	// onAnnounce handles peers announces.
   // It verifies the given hash, if it is valid,
-  // it triggers a login sequence once every opts.LoginRetry seconds.
-  // It checks message's date is not older than this.opts.AnnounceTimeout
+  // it triggers a login sequence once every WhisperOpts.LoginRetry seconds.
 	async onAnnounce (msg) {
     const bPub = this.publicKey()
     const from = msg.from
     if (from===bPub) {
       return;
     }
-    if (isBefore(msg.date, this.opts.AnnounceTimeout)) {
+    if (isBefore(msg.date, WhisperOpts.AnnounceTimeout)) {
       return
     }
     const meH = await SumHash(this.roomID, this.roomPwd, msg.date, from);
@@ -333,7 +326,7 @@ class Whisper {
     this.announces[from].date = msg.date;
     this.announces[from].hash = msg.hash;
     this.announces[from].lastSeen = new Date();
-    if (!isNew && !isBefore(this.announces[from].lastLogin, this.opts.LoginRetry)) {
+    if (!isNew && !isBefore(this.announces[from].lastLogin, WhisperOpts.LoginRetry)) {
       return
     }
     this.announces[from].lastLogin = new Date()
@@ -342,7 +335,7 @@ class Whisper {
 
   // nwToken generates and store a new token for given public key and msg type.
   newToken(publicKey, typ) {
-    this.trigger(EvType.Negotiating, this.cntNegotiations([MsgType.Login]))
+    this.trigger(EvType.Negotiating, this.cntNegotiations())
     if (!this.tokens[publicKey]) {
       this.tokens[publicKey] = {}
     }
@@ -375,7 +368,7 @@ class Whisper {
     if (!this.tokens[publicKey][typ][token]) {
       return false
     }
-    this.trigger(EvType.Negotiating, this.cntNegotiations([MsgType.Login]))
+    this.trigger(EvType.Negotiating, this.cntNegotiations())
     const curNego = this.tokens[publicKey][typ][token];
     delete(this.tokens[publicKey][typ][token])
     if (this.tokens[publicKey][typ].length<1){
@@ -387,7 +380,7 @@ class Whisper {
     if( curNego.token!==token){
       return false
     }
-    if (isBefore(curNego.since, this.opts.AnnounceTimeout)) {
+    if (isBefore(curNego.since, WhisperOpts.AnnounceTimeout)) {
       console.error("invalid token: lifetime exceeded");
       return false
     }
@@ -452,7 +445,7 @@ class Whisper {
       "hash": await SumHash(this.roomID, this.roomPwd, tok.token, tok.type, bPub),
       "token":tok.token,
     }
-    this.trigger(EvType.Negotiating, this.cntNegotiations([MsgType.Login]))
+    this.trigger(EvType.Negotiating, this.cntNegotiations())
     await this.send(msg, withPublicKey)
 	}
 
@@ -594,11 +587,11 @@ class Whisper {
     if (cleardata.result!==ChResults.OK) {
       this.setPeerStatus(data.from, cleardata.result)
       this.checkRoomAccept()
-      this.trigger(EvType.Negotiating, this.cntNegotiations([MsgType.Login]))
+      this.trigger(EvType.Negotiating, this.cntNegotiations())
       return
     }
     this.peerAddUpdate(cleardata, data)
-    this.trigger(EvType.Negotiating, this.cntNegotiations([MsgType.Login]))
+    this.trigger(EvType.Negotiating, this.cntNegotiations())
 	}
 
   // issueAccept sends an accept message.
