@@ -47,7 +47,7 @@ class TcpTransport {
 
 
   // connect the websocket.
-  connect () {
+  async connect () {
     if (this.socket!=null){
       this.close();
     }
@@ -60,29 +60,22 @@ class TcpTransport {
     this.encoder.pipe(this.socket)
     const decoder = this.codec.decoder();
     this.encoder.on("error", console.error);
-    decoder.on("error", console.error);
     decoder.on("data", (data)=>{
       that.trigger(EvType.Message, data);
     })
     this.socket.pipe(decoder)
-    this.socket.on('connect', function() {
+    this.socket.once('connect', function() {
       that.trigger(EvType.Connect);
     });
-    this.socket.on('close', function() {
+    this.socket.once('close', function() {
       that.trigger(EvType.Disconnect);
-      if (that.reconnectTimeout>0){
-        that.trigger(EvType.Reconnecting, that.reconnectTimeout);
-        clearTimeout(that.reconnectHandle)
-        that.reconnectHandle = setTimeout(that.reconnect.bind(that), that.reconnectTimeout);
-      }
     });
     this.socket.on('error', function(e) {
       that.trigger(EvType.Error, e);
       that.socket.destroy();
       that.socket = null;
     });
-    this.socket.connect(this.port, this.addr);
-    return this
+    return this.socket.connect(this.port, this.addr);
   };
 
   // send a message
@@ -100,17 +93,13 @@ class TcpTransport {
     return null;
   }
 
-  reconnect () {
-    clearTimeout(this.reconnectHandle);
-    this.trigger(EvType.Reconnect, this.reconnectTimeout);
-		this.connect(this.port, this.addr);
-  }
-
-  close () {
+  async close () {
     if (this.encoder) {
       this.encoder.end();
     }
-    this.socket.destroy();
+    if (this.socket) {
+      this.socket.destroy();
+    }
     this.socket = null;
   }
 }

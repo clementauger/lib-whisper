@@ -2,10 +2,12 @@ const EventEmitter = require('events');
 
 class Peer {
 
-  constructor(transport, whisper, reconnect){
-    this.transport = transport
+  constructor(whisper, reconnect){
     this.whisper = whisper
     this.reconnect = reconnect
+
+    this.connect=this.connect.bind(this);
+    this.onConnect=this.onConnect.bind(this);
   }
 
   // on register an event listener.
@@ -24,31 +26,23 @@ class Peer {
   }
 
   async connect(){
-    var that = this;
-    this.transport.on("connect", async () => {
-      await that.whisper.connect(that.transport)
-      that.whisper.trigger("connect");
-      if (that.reconnect) {
-        that.transport.once("reconnecting", ()=>{
-          that.whisper.trigger("reconnecting");
-        })
-        that.transport.once("reconnect", ()=>{
-          that.whisper.trigger("reconnect");
-          that.connect()
-        })
-      }
-    })
-    return await this.transport.connect()
+    const transport = this.whisper.transport;
+    if (this.reconnect) {
+      this.whisper.once("connect", this.onConnect)
+    }
+    return await this.whisper.connect()
+  }
+
+  async onConnect(){
+    if (this.reconnect) {
+      this.whisper.once("reconnect", this.connect)
+    }
   }
 
   async disconnect(){
-    this.transport.off("reconnect")
-    this.transport.off("reconnecting")
-    this.whisper.trigger("disconnect");
-    await this.whisper.close()
-    this.transport.off("disconnect")
-    this.transport.off("connect")
-    await this.transport.close()
+    this.whisper.off("connect", this.onConnect)
+    this.whisper.off("reconnect", this.connect)
+    return await this.whisper.close()
   }
 
   broadcast(){

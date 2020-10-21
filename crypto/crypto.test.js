@@ -13,7 +13,6 @@ describe('Crypto', async function () {
   }
   Object.keys(tests).map((name)=>{
     const provider = tests[name];
-    // const original = tests[n].original;
     const keys = tests[name].keys;
     describe('#'+name, function () {
       it('should create new keys', async function () {

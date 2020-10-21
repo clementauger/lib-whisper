@@ -7,10 +7,6 @@ var shaker = require("./saltshaker/saltshaker");
 class SaltShaker {
   constructor(){
     this.nonces = [];
-    // this.keys = {
-    //   publicKey: "",
-    //   privateKey: "",
-    // };
   }
 
   async create(){
@@ -20,32 +16,6 @@ class SaltShaker {
       privateKey: k.privatekey,
     }
   }
-  // async init(keys){
-  //   if (keys && (
-  //     (keys.publicKey!==""&&keys.privateKey!=="") || (keys.publickey!==""&&keys.privatekey!=="")
-  //   )) {
-  //     return this.set(keys)
-  //   }
-  //   this.set(await this.create())
-  // }
-  //
-  // set(k) {
-  //   if(k.publickey&&k.privatekey) {
-  //     this.keys = {
-  //     publicKey:k.publickey,
-  //     privateKey:k.privatekey,
-  //   }
-  //   }else{
-  //     this.keys = k
-  //   }
-  // }
-  //
-  // get() {
-  //   return {
-  //     publicKey: this.keys.publicKey,
-  //     privateKey: this.keys.privateKey,
-  //   }
-  // }
 
   async newNonce(){
     if (this.nonces.length > 500) {
@@ -61,22 +31,6 @@ class SaltShaker {
     }
     return ;
   }
-
-  // async hash(roomID, roomPwd, d, mePubKeyB64){
-  //   var args = Array.from(arguments).map((a)=>{
-  //     if (a.toISOString) {
-  //       return a.toISOString()
-  //     }
-  //     return a
-  //   });
-  //   const encoder = new util.TextEncoder();
-  //   const shaObj = new jsSHA("SHA-512", "TEXT", { encoding: "UTF8" });
-  //   args.map((a)=>{
-  //     shaObj.update(a);
-  //   })
-  //   const hash = shaObj.getHash("UINT8ARRAY");
-  //   return nacl.util.encodeBase64(hash);
-  // }
 
   async encrypt(data, remotePubKey, yourPrivKey) {
     const nonce = await this.newNonce();
@@ -96,10 +50,6 @@ class SaltShaker {
   async verify(data, remotePubKey) {
     return shaker.verify(data, remotePubKey);
   }
-
-  // publicKey() {
-  //   return this.keys.publicKey;
-  // }
 }
 
 module.exports = { SaltShaker: new SaltShaker() }

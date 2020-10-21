@@ -206,9 +206,9 @@ class LibP2PTransport {
     that.trigger(EvType.Connect);
 
     if(this._dht) {
-      this._announce()
       this._announceHandle = setInterval(this._announce.bind(this), this._announceInterval)
       this._lookupHandle = setInterval(this._lookup.bind(this), this._lookupInterval)
+      this._announce()
       this._lookup()
     }
 
@@ -316,11 +316,13 @@ class LibP2PTransport {
       this.encoder.removeAllListeners("data")
     }
     this._dhtAnnounces = [];
-    this.libp2p.peerStore.off('peer', this._onPeer)
-    this.libp2p.unhandle(this.protocol)
-    await this.libp2p.stop();
-    this.libp2p = null;
-    this.trigger(EvType.Disconnect);
+    if (this.libp2p){
+      this.libp2p.peerStore.off('peer', this._onPeer)
+      this.libp2p.unhandle(this.protocol)
+      await this.libp2p.stop();
+      this.libp2p = null;
+      this.trigger(EvType.Disconnect);
+    }
   }
 }
 

@@ -68,12 +68,11 @@ class ArrayTransport {
 
 
   // connect the transport.
-  connect () {
+  async connect () {
     var that = this;
     clearInterval(this.readHandle);
     this.readHandle = setInterval( this.read.bind(this), this.readInterval)
     this.trigger(EvType.Connect);
-    return this
   };
 
   read () {
@@ -97,18 +96,18 @@ class ArrayTransport {
 
   reconnect () {
     clearTimeout(this.reconnectHandle);
-    this.trigger(EvType.Reconnect, this.reconnectTimeout);
-		this.connect();
+    // this.trigger(EvType.Reconnect, this.reconnectTimeout);
+		// this.connect();
   }
 
-  close () {
+  async close () {
     clearInterval(this.readHandle);
     this.trigger(EvType.Disconnect);
-    if (this.reconnectTimeout>0){
-      this.trigger(EvType.Reconnecting, this.reconnectTimeout);
-      clearTimeout(this.reconnectHandle)
-      this.reconnectHandle = setTimeout(this.reconnect.bind(this), that.reconnectTimeout);
-    }
+    // if (this.reconnectTimeout>0){
+    //   this.trigger(EvType.Reconnecting, this.reconnectTimeout);
+    //   clearTimeout(this.reconnectHandle)
+    //   // this.reconnectHandle = setTimeout(this.reconnect.bind(this), that.reconnectTimeout);
+    // }
   }
 }
 

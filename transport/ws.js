@@ -9,11 +9,8 @@ class WsTransport {
   constructor ({
     url = "",
     codec = Codec.Json,
-    reconnectTimeout = 0,
   }) {
     this.events = new EventEmitter();
-    this.reconnectTimeout = reconnectTimeout;
-    this.reconnectHandle = null;
     this.url = url;
     this.codec = codec;
     this.ws = null;
@@ -45,7 +42,7 @@ class WsTransport {
 
 
   // connect the websocket.
-  connect () {
+  async connect () {
     if (this.ws!=null){
       this.close();
     }
@@ -53,6 +50,9 @@ class WsTransport {
 
     var that = this;
     this.ws.onopen = () => {
+      if (that.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
       that.trigger(EvType.Connect);
     };
     this.ws.onmessage = (m) => {
@@ -70,20 +70,8 @@ class WsTransport {
       that.ws = null;
     };
     this.ws.onclose = (e) => {
-      if (e.code == 1000) {
-        if (e.reason && MsgType.hasOwnProperty(e.reason)) {
-          that.trigger(EvType.Disconnect, e.reason);
-          return
-        }
-      } else if (e.code != 1005) {
-        if (that.reconnectTimeout>0){
-          that.trigger(EvType.Reconnecting, that.reconnectTimeout);
-          clearTimeout(that.reconnectHandle)
-          that.reconnectHandle = setTimeout(that.reconnect.bind(that), that.reconnectTimeout);
-        }
-      }else{
-        that.trigger(EvType.Disconnect, e);
-      }
+      that.trigger(EvType.Disconnect, e);
+      that.ws = null;
     };
     return this
   }
@@ -101,25 +89,14 @@ class WsTransport {
       this.trigger("error", e)
     }
 
-		// try {
-		// 	if (typeof (msg) == "object") {
-		// 		msg = JSON.stringify(msg);
-		// 	}
-		// 	this.ws.send(msg);
-		// } catch (e) {
-    //   return e
-		// };
     return null;
   }
 
-  reconnect () {
-    clearTimeout(this.reconnectHandle);
-    this.trigger(EvType.Reconnect, this.reconnectTimeout);
-		this.connect(this.url);
-  }
-
-  close () {
-    this.ws.close();
+  async close () {
+    if (this.ws){
+      this.ws.close();
+    }
+    this.ws = null;
   }
 }
 

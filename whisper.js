@@ -1,7 +1,6 @@
 const EventEmitter = require('events');
-const {
-  Crypters, SumHash
-} = require("./crypto.js")
+const { Crypters, SumHash } = require("./crypto.js")
+const { CryptoTransport } = require("./cryptotransport.js")
 
 var MsgType = MsgType || {};
 MsgType.Announce = "announce";
@@ -38,15 +37,21 @@ var WhisperOpts = {
 
 class Whisper {
   constructor ({
-    crypter = Crypters.NoCrypto,
+    transport = null,
+    handle = "",
+    keys = {publicKey: null, privateKey: null},
+    shared = {publicKey: null, privateKey: null},
     roomID = "",
     roomPwd = "",
-    me = {
-      handle: "",
-      keys: {publicKey: "", secretKey: ""}
-    },
     opts = WhisperOpts,
   }) {
+    if (keys.publicKey===null || keys.privateKey===null){
+      throw "keys must be provided"
+    }
+    if (shared.publicKey===null || shared.privateKey===null){
+      throw "shared keys must be provided"
+    }
+
     this.events = new EventEmitter();
     this.msgDispatcher = new EventEmitter();
 
@@ -54,33 +59,43 @@ class Whisper {
     this.roomPwd = roomPwd;
     this.opts = opts;
 
-
-    // {handle, keys:{publicKey, secretKey}}
-    this.me = {handle: me.handle};
-    this.shared = null;
+    // {handle, keys:{publicKey, secretKey}, shared:{publicKey, secretKey}}
+    this.me = {
+      handle: handle,
+      keys: keys,
+      shared: shared
+    };
     // {publicKey, handle}
     this.peers = [];
 
-    this.transport = null;
+    this.transport = transport;
 
     this.announceHandle = null;
     // {publicKey, date, hash}
     this.announces = [];
-
-    // {from: public key b64, key: {publicKey: b64, secret: b64}, since: Date}
-    this.sharedKeys = [];
 
     // pubkey=>{token, since, result}
     this.tokens = {};
     // pubkey=>status
     this.peerStatus = {};
 
-    this.crypter = crypter;
-
     if (!this.me.handle) {
       this.me.handle = makeid(5)
     }
     this.isRenewingHandle = false;
+
+
+    this.onAnnounce = this.onAnnounce.bind(this);
+    this.onLogin = this.onLogin.bind(this);
+    this.onSendInfo = this.onSendInfo.bind(this);
+    this.onLoginResponse = this.onLoginResponse.bind(this);
+    this.onTransportMessage = this.onTransportMessage.bind(this);
+    this.onTransportError = this.onTransportError.bind(this);
+    this.onTransportConnect = this.onTransportConnect.bind(this);
+    this.onTransportDisconnect = this.onTransportDisconnect.bind(this);
+    this.onTransportReconnect = this.onTransportReconnect.bind(this);
+    this.onTransportReconnecting = this.onTransportReconnecting.bind(this);
+    this.announce = this.announce.bind(this);
   }
 
   // on register an event listener.
@@ -104,7 +119,7 @@ class Whisper {
   // trigger an event with its argument.
   trigger () {
     var args = Array.from(arguments);
-    return this.events.emit.apply(this.events, args);
+     this.events.emit.apply(this.events, args);
   }
 
   // publicKey returns underlying public key.
@@ -123,61 +138,87 @@ class Whisper {
   // new keys are created if they don t exist,
   // our shared key is added to the list of known keys,
   // and the announce interval is started.
-  async connect (transport) {
-    if (this.transport){
-      this.close();
-    }
-    this.transport = transport;
-    if (!this.me.keys) {
-      this.me.keys = await this.crypter.create();
-    }
-    if (!this.shared) {
-      this.shared = await this.crypter.create();
-    }
-    this.sharedKeys.push({
-      from: this.publicKey(),
-      key: this.shared,
-      since: new Date(),
-    });
+  async connect () {
+    this.close();
 
-    this.msgDispatcher.on(MsgType.Announce, this.onAnnounce.bind(this))
-    this.msgDispatcher.on(MsgType.Login, this.onLogin.bind(this))
-    this.msgDispatcher.on(MsgType.SendInfo, this.onSendInfo.bind(this))
-    this.msgDispatcher.on(MsgType.LoginResponse, this.onLoginResponse.bind(this))
-    this.transport.on(EvType.Message, this.onTransportMessage.bind(this))
-    this.transport.on(EvType.Error, this.onTransportError.bind(this))
+    this.msgDispatcher.on(MsgType.Announce, this.onAnnounce)
+    this.msgDispatcher.on(MsgType.Login, this.onLogin)
+    this.msgDispatcher.on(MsgType.SendInfo, this.onSendInfo)
+    this.msgDispatcher.on(MsgType.LoginResponse, this.onLoginResponse)
 
-    if (transport.addDHTAnnounce) {
-      transport.addDHTAnnounce( await SumHash(this.roomID, this.roomPwd) )
-    }
+    this.transport.on(EvType.Connect, this.onTransportConnect)
+    this.transport.on(EvType.Disconnect, this.onTransportDisconnect)
+    this.transport.on(EvType.Reconnect, this.onTransportReconnect)
+    this.transport.on(EvType.Reconnecting, this.onTransportReconnecting)
+    this.transport.on(EvType.Message, this.onTransportMessage)
+    this.transport.on(EvType.Error, this.onTransportError)
 
-    this.announceHandle = setInterval(this.announce.bind(this), this.opts.AnnounceInterval)
-    this.announce()
+    this.transport.addDHTAnnounce( await SumHash(this.roomID, this.roomPwd) )
+
+    var that = this;
+    this.transport.once("connect", () => {
+      that.announceHandle = setInterval(that.announce, that.opts.AnnounceInterval)
+      that.announce()
+    })
+    return await this.transport.connect()
   }
 
   // close the underlying transport.
   async close () {
-    this.msgDispatcher.removeAllListeners(MsgType.Announce)
-    this.msgDispatcher.removeAllListeners(MsgType.Login)
-    this.msgDispatcher.removeAllListeners(MsgType.LoginResponse)
-    this.msgDispatcher.removeAllListeners(MsgType.SendInfo)
+
+    this.msgDispatcher.off(MsgType.Announce, this.onAnnounce)
+    this.msgDispatcher.off(MsgType.Login, this.onLogin)
+    this.msgDispatcher.off(MsgType.SendInfo, this.onSendInfo)
+    this.msgDispatcher.off(MsgType.LoginResponse, this.onLoginResponse)
+
     if (this.transport) {
-      this.transport.off(EvType.Message)
-      this.transport.off(EvType.Error)
-      if (this.transport.rmDHTAnnounce) {
-        const h = await SumHash(this.roomID, this.roomPwd)
-        this.transport.rmDHTAnnounce(h)
-      }
+      this.transport.off(EvType.Connect, this.onTransportConnect)
+      this.transport.off(EvType.Disconnect, this.onTransportDisconnect)
+      this.transport.off(EvType.Reconnect, this.onTransportReconnect)
+      this.transport.off(EvType.Reconnecting, this.onTransportReconnecting)
+      this.transport.off(EvType.Message, this.onTransportMessage)
+      this.transport.off(EvType.Error, this.onTransportError)
+
+      this.transport.rmDHTAnnounce( await SumHash(this.roomID, this.roomPwd) )
     }
-    this.transport = null;
-    this.sharedKeys = []
     this.peers = []
     clearInterval(this.announceHandle)
+    return await this.transport.close()
   }
 
   // onTransportError triggers this error handler.
   onTransportError (err) {
-    this.trigger(EvType.Error, err)
+    var args = Array.from(arguments);
+    args.unshift(EvType.Error)
+    return this.trigger.apply(this, args);
+  }
+
+  // onTransportConnect triggers this error handler.
+  onTransportConnect () {
+    var args = Array.from(arguments);
+    args.unshift(EvType.Connect)
+    return this.trigger.apply(this, args);
+  }
+
+  // onTransportDisconnect triggers this error handler.
+  onTransportDisconnect () {
+    var args = Array.from(arguments);
+    args.unshift(EvType.Disconnect)
+    return this.trigger.apply(this, args);
+  }
+
+  // onTransportReconnect triggers this error handler.
+  onTransportReconnect () {
+    var args = Array.from(arguments);
+    args.unshift(EvType.Reconnect)
+    return this.trigger.apply(this, args);
+  }
+
+  // onTransportReconnecting triggers this error handler.
+  onTransportReconnecting () {
+    var args = Array.from(arguments);
+    args.unshift(EvType.Reconnecting)
+    return this.trigger.apply(this, args);
   }
 
   _debug(info) {
@@ -193,52 +234,10 @@ class Whisper {
   // it is handled by the internal logic.
   // Otherwise, it is emitted on this whisper instance only if the peer emitter
   // is accepted.
-  async onTransportMessage (message) {
-    var msg = {};
-    if (typeof message !=="object" || !(message instanceof Object)) {
-      console.error("got non object from transport", message)
-    }
-    if (typeof message ==="object" || message instanceof Object) {
-      msg = message
-    } else {
-      try {
-        msg = JSON.parse(message);
-      } catch (e) {
-        console.error("failed to json parse message ", e);
-        return null;
-      }
-    }
-
-    const verify = await this.crypter.verify(msg.sign, msg.from)
-    if (!verify){
-      return
-    }
+  async onTransportMessage (msg, cleardata) {
     if (msg.type && msg.type===MsgType.Announce) {
       this._debug({handle: this.me.handle, type: "message", dir: "rcv", data: msg})
       this.onAnnounce(msg)
-      return
-    }
-
-    var scleardata = "";
-		if (msg.to === this.publicKey()){
-      scleardata = await this.crypter.decrypt(msg.data, msg.from, this.me.keys.privateKey).catch(console.error)
-		} else {
-      var foundkey = this.sharedKeys.filter( isSharedPubkey(msg.to) ).pop()
-      if (!foundkey) {
-        return
-      }
-      foundkey = foundkey.key
-      scleardata = await this.crypter.decrypt(msg.data, foundkey.publicKey, foundkey.privateKey).catch(console.error)
-		}
-		if (!scleardata) {
-			console.error(this.me.handle, "is shared: ", !!this.sharedKeys.filter( isSharedPubkey(msg.to) ).pop())
-			return
-		}
-
-
-		var cleardata = JSON.parse(scleardata);
-    if(!cleardata.type) {
-      console.error(this.me.handle, "invalid packaet: missing type qualifier")
       return
     }
     this._debug({handle: this.me.handle, type: "message", dir: "rcv", data: cleardata})
@@ -264,8 +263,7 @@ class Whisper {
       "type": MsgType.Announce,
       "from": bPub,
       "date": d,
-      "hash": h,
-      "sign": await this.crypter.sign(h, this.privateKey()),
+      "data": h,
     }
 	}
 
@@ -294,7 +292,7 @@ class Whisper {
       if (!isBefore(announce.lastSeen, this.opts.AnnounceTimeout*2)) {
         return true;
       }
-      this.sharedKeys = this.sharedKeys.filter( notFrom(from) )
+      this.transport.rmSharedKey(from)
       delete(this.tokens[from])
       delete(this.announces[from])
       delete(this.peerStatus[from])
@@ -317,7 +315,7 @@ class Whisper {
       return
     }
     const meH = await SumHash(this.roomID, this.roomPwd, msg.date, from);
-    const valid = msg.hash===meH;
+    const valid = msg.data===meH;
     if (!valid){
       return
     }
@@ -331,7 +329,7 @@ class Whisper {
     }
     this.announces[from].publicKey = msg.publicKey;
     this.announces[from].date = msg.date;
-    this.announces[from].hash = msg.hash;
+    this.announces[from].hash = msg.data;
     this.announces[from].lastSeen = new Date();
     if (!isNew && !isBefore(this.announces[from].lastLogin, this.opts.LoginRetry)) {
       return
@@ -479,7 +477,7 @@ class Whisper {
     data.token = loginToken
     data.hash = await SumHash(this.roomID, this.roomPwd, loginToken, token.token, token.type, bPub)
     data.handle = this.me.handle
-    data.shared = this.shared
+    data.shared = this.me.shared
     await this.send(data, peerPublicKey);
   }
 
@@ -538,8 +536,8 @@ class Whisper {
       return
     }
 
-    this.sharedKeys = this.sharedKeys.filter( notFrom(data.from) )
-    this.sharedKeys.push({from: data.from, key: cleardata.shared, since: new Date()});
+    this.transport.rmSharedKey(data.from)
+    this.transport.addSharedKey(data.from, cleardata.shared)
     if (isNew) {
       this.peers.push(peer);
       // console.log(this.me.handle, this.publicKey(), "  peer add ", peer.handle, peer.publicKey)
@@ -612,46 +610,21 @@ class Whisper {
       {
         mytoken:this.newToken(peerPublicKey, MsgType.SendInfo).token,
         handle:this.me.handle,
-        shared:this.shared
+        shared:this.me.shared
       }
     );
   }
 
 	// send a private message.
 	async send(msg, b64ToPubKey) {
-    if (this.transport){
-      this._debug({handle: this.me.handle, type: "message", dir: "snd", data: {to:b64ToPubKey,data:msg}})
-  		const data = await this.crypter.encrypt(JSON.stringify(msg), b64ToPubKey, this.privateKey());
-  		const bPub = this.publicKey();
-  		const sign = await this.crypter.sign(await SumHash(data), this.privateKey());
-  		const err = this.transport.send({ "data": data, "from": bPub, "to": b64ToPubKey, "sign":sign });
-      if (err){
-        console.error(this.me.handle, this.publicKey(), " transport err:", err)
-      }
-    }
+    this._debug({handle: this.me.handle, type: "message", dir: "snd", data: msg})
+    return this.transport.send(msg, b64ToPubKey);
 	}
 
 	// broadcast, encrypt and authenticate a message using a sharedKey.
 	async broadcast (msg) {
-    const oldest = this.peers.filter(iAccepted.bind(this)).sort(sortBySince).pop();
-    if (!oldest) {
-      console.error(this.me.handle, "could not find a peer to send message")
-      return
-    }
-    const key = this.sharedKeys.filter( withKey ).filter( isFrom(oldest.publicKey) ).pop();
-    if (!key) {
-      console.error(this.me.handle, "could not find peer shared keys to send message")
-      return
-    }
-    if (!key.key) {
-      console.error(this.me.handle, "could not get peer shared keys to send message")
-      return
-    }
-		const bPub = this.publicKey();
-		const data = await this.crypter.encrypt(JSON.stringify(msg), key.key.publicKey, key.key.privateKey);
-    const sign = await this.crypter.sign(await SumHash(data), this.privateKey());
-    this._debug({handle: this.me.handle, type: "message", dir: "snd", data: {to:key.key.publicKey, data:data}})
-    this.transport.send({ "data": data, "from": bPub, "to": key.key.publicKey, "sign":sign });
+    this._debug({handle: this.me.handle, type: "message", dir: "snd", data: msg})
+    return this.transport.broadcast(msg);
 	}
 
 	// broadcastDirect send a private message to each accepted peer.

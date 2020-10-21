@@ -1,8 +1,4 @@
 const openpgp = require('openpgp');
-// const jsSHA = require("jssha");
-// const nacl = require('tweetnacl');
-// nacl.util = require('tweetnacl-util');
-// const util = require('util');
 const { isBrowser } = require("browser-or-node");
 
 
@@ -17,13 +13,6 @@ if (isBrowser) {
 }
 
 class Pgp {
-  // constructor(){
-  //   this.nonces = [];
-  //   this.keys = {
-  //     publicKey: "",
-  //     privateKey: "",
-  //   }
-  // }
 
   async create(){
     const { privateKeyArmored, publicKeyArmored } = await openpgp.generateKey({
@@ -36,55 +25,6 @@ class Pgp {
       privateKey: privateKeyArmored,
     }
   }
-  // async init(keys){
-  //   if (keys) {
-  //     return this.set(keys)
-  //   }
-  //   this.set(await this.create())
-  // }
-  //
-  // set(k) {
-  //   this.keys.publicKey = k.publicKey
-  //   this.keys.privateKey = k.privateKey
-  // }
-  //
-  // get() {
-  //   return {
-  //     publicKey: this.keys.publicKey,
-  //     privateKey: this.keys.privateKey,
-  //   }
-  // }
-
-  // async newNonce(){
-  //   if (this.nonces.length > 500) {
-  //     this.nonces.slice(500, this.nonces.length-500)
-  //   }
-  //   while(true) {
-  //     const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
-  //     const bnonce = nacl.util.encodeBase64(nonce)
-  //     if (!this.nonces.includes(bnonce)) {
-  //       this.nonces.push(bnonce)
-  //       return bnonce;
-  //     }
-  //   }
-  //   return ;
-  // }
-
-  // async hash(roomID, roomPwd, d, mePubKeyB64){
-  //     var args = Array.from(arguments).map((a)=>{
-  //       if (a.toISOString) {
-  //         return a.toISOString()
-  //       }
-  //       return a
-  //     });
-  //     const encoder = new util.TextEncoder();
-  //     const shaObj = new jsSHA("SHA-512", "TEXT", { encoding: "UTF8" });
-  //     args.map((a)=>{
-  //       shaObj.update(a);
-  //     })
-  //     const hash = shaObj.getHash("UINT8ARRAY");
-  //     return nacl.util.encodeBase64(hash);
-  // }
 
   async encrypt(data, remotePubKey, yourPrivKey) {
     const { keys: [privateKey] } = await openpgp.key.readArmored(yourPrivKey);
@@ -127,10 +67,6 @@ class Pgp {
     }
     return cleartext
   }
-
-  // publicKey() {
-  //   return this.keys.publicKey;
-  // }
 }
 
 module.exports = { Pgp: new Pgp() }

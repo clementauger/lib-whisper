@@ -3,6 +3,7 @@ const { TcpTransport, TcpTestServer } = require("./transport/tcp")
 const { WsTransport, WsTestServer } = require("./transport/ws")
 const { Whisper, WhisperOpts, Crypters } = require("./whisper")
 const { Peer } = require("./peer")
+const { CryptoTransport } = require("./cryptotransport")
 const Codec = require("./transport/codec");
 
 function waitGroup(done, n) {
@@ -25,22 +26,30 @@ const port = 10000
 const addr = "127.0.0.1";
 
 const srv = TcpTestServer({port, binary: codec.binary})
-srv.on("listening", ()=>{
-
-  function newPeer(handle){
+srv.on("listening", async ()=>{
+  async function newPeer(handle){
+    const crypter = Crypters.NoCrypto
+    const keys = await crypter.create()
+    const shared = await crypter.create()
     return new Peer(
-      new TcpTransport({port, addr, codec}),
       new Whisper({
-        crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-        me: {handle},
+        transport: new CryptoTransport({
+          crypter:crypter, keys:keys, shared:shared,
+          transport:new TcpTransport({port, addr, codec})
+        }),
+        roomID: "room id",
+        roomPwd: "room pwd",
+        handle: handle,
+        keys:keys,
+        shared:shared,
       }),
     );
   }
 
-  const bob = newPeer("bob");
-  const alice = newPeer("alice");
-  const peter = newPeer("peter");
-  const dup = newPeer("peter");
+  const bob = await newPeer("bob");
+  const alice = await newPeer("alice");
+  const peter = await newPeer("peter");
+  const dup = await newPeer("peter");
 
   if(debug){
     bob.on("debug", (info)=>{

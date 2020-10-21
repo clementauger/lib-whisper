@@ -4,6 +4,7 @@ const { TcpTransport, TcpTestServer } = require("./transport/tcp")
 const { WsTransport, WsTestServer } = require("./transport/ws")
 const { Whisper, MsgType, Crypters, SumHash } = require("./whisper")
 const { Peer } = require("./peer")
+const { CryptoTransport } = require("./cryptotransport")
 const Codec = require("./transport/codec");
 
 function waitGroup(done, n) {
@@ -30,19 +31,28 @@ describe('Whisper', function () {
       const debug = false;
       const codec = Codec.MsgPack;
       const srv = TcpTestServer({port, binary: codec.binary})
-      srv.on("listening", ()=>{
+      srv.on("listening", async ()=>{
 
-        function newPeer(handle){
+        async function newPeer(handle){
+          const crypter = Crypters.Nacl
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Crypters.Nacl, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new TcpTransport({port, addr, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
         if(debug){
           bob.on("debug", (info)=>{
@@ -71,24 +81,33 @@ describe('Whisper', function () {
         bob.connect()
       })
     });
-    it('should demo tcp transport, nacl encrypted, 2 peers session', function (done) {
+    it('should demo tcp transport, nacl encrypted, 2 peers session, json codec', function (done) {
       const port = sport++;
       const debug = false;
       const codec = Codec.Json;
       const srv = TcpTestServer({port, binary: codec.binary})
-      srv.on("listening", ()=>{
+      srv.on("listening", async ()=>{
 
-        function newPeer(handle){
+        async function newPeer(handle){
+          const crypter = Crypters.Nacl
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Crypters.Nacl, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new TcpTransport({port, addr, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
         if(debug){
           bob.on("debug", (info)=>{
@@ -122,19 +141,28 @@ describe('Whisper', function () {
       const codec = Codec.Json;
       const debug = false;
       const srv = TcpTestServer({port, binary: codec.binary})
-      srv.on("listening", ()=>{
+      srv.on("listening", async ()=>{
 
-        function newPeer(handle){
+        async function newPeer(handle){
+          const crypter = Crypters.SaltShaker
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Crypters.SaltShaker, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new TcpTransport({port, addr, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
         if(debug){
           bob.on("debug", (info)=>{
@@ -169,19 +197,28 @@ describe('Whisper', function () {
       this.timeout(5000)
       const codec = Codec.Json;
       const srv = TcpTestServer({port, binary: codec.binary})
-      srv.on("listening", ()=>{
+      srv.on("listening", async ()=>{
 
-        function newPeer(handle){
+        async function newPeer(handle){
+          const crypter = Crypters.Pgp
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Crypters.Pgp, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new TcpTransport({port, addr, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
         if(debug){
           bob.on("debug", (info)=>{
@@ -216,43 +253,54 @@ describe('Whisper', function () {
       this.timeout(10000)
       const codec = Codec.Json;
 
-      function newPeer(handle){
-        return new Peer(
-          new LibP2PTransport({codec}),
-          new Whisper({
-            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-            me: {handle: handle,},
-          }),
-        );
-      }
-      const bob = newPeer("bob");
-      const alice = newPeer("alice");
+      (async () => {
+        async function newPeer(handle){
+          const crypter = Crypters.Pgp
+          const keys = await crypter.create()
+          const shared = await crypter.create()
+          return new Peer(
+            new Whisper({
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport: new LibP2PTransport({codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
+            }),
+          );
+        }
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
-      if(debug){
-        bob.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-        })
-        alice.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
-        })
-      }
+        if(debug){
+          bob.on("debug", (info)=>{
+            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+          })
+          alice.on("debug", (info)=>{
+            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+          })
+        }
 
-      var wg = waitGroup(()=>{
-        bob.disconnect()
-        alice.disconnect()
-        done();
-      }, 2)
-      alice.once("message", wg)
-      bob.once("message", wg)
+        var wg = waitGroup(()=>{
+          bob.disconnect()
+          alice.disconnect()
+          done();
+        }, 2)
+        alice.once("message", wg)
+        bob.once("message", wg)
 
-      var wg2 = waitGroup(()=>{
-        bob.broadcast({type:"message", data :"hello"})
-        alice.broadcast({type:"message", data :"yo"})
-      }, 2)
-      bob.once("peer.accept", wg2)
-      alice.once("peer.accept", wg2)
-      alice.connect()
-      bob.connect()
+        var wg2 = waitGroup(()=>{
+          bob.broadcast({type:"message", data :"hello"})
+          alice.broadcast({type:"message", data :"yo"})
+        }, 2)
+        bob.once("peer.accept", wg2)
+        alice.once("peer.accept", wg2)
+        alice.connect()
+        bob.connect()
+      })();
     });
     it('should demo websocket transport, human readable, 2 peers session', function (done) {
       const port = sport++;
@@ -260,19 +308,28 @@ describe('Whisper', function () {
       const debug = false;
       const url = `ws://127.0.0.1:${port}/`;
       const srv = WsTestServer(port)
-      srv.on("listening", ()=>{
+      srv.on("listening", async ()=>{
 
-        function newPeer(handle){
+        async function newPeer(handle){
+          const crypter = Crypters.NoCrypto
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new WsTransport({url, codec}),
             new Whisper({
-              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new WsTransport({url, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
         if (debug) {
           bob.on("debug", (info)=>{
@@ -310,19 +367,28 @@ describe('Whisper', function () {
       const debug = false;
       const url = `ws://127.0.0.1:${port}/`;
       const srv = WsTestServer(port)
-      srv.on("listening", ()=>{
+      srv.on("listening", async ()=>{
 
-        function newPeer(handle){
+        async function newPeer(handle){
+          const crypter = Crypters.NoCrypto
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new WsTransport({url, codec}),
             new Whisper({
-              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new WsTransport({url, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
         if (debug) {
           bob.on("debug", (info)=>{
@@ -357,69 +423,88 @@ describe('Whisper', function () {
     it('should demo array transport, human readable, 2 peers session', function (done) {
       const tr = new ArrayTransportProvider(100)
       const debug = false;
+      ( async ()=>{
+        async function newPeer(handle){
+          const crypter = Crypters.NoCrypto
+          const keys = await crypter.create()
+          const shared = await crypter.create()
+          return new Peer(
+            new Whisper({
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:tr.endPoint()
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
+            }),
+          );
+        }
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
-      function newPeer(handle){
-        return new Peer(
-          tr.endPoint().connect(),
-          new Whisper({
-            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-            me: {handle: handle,},
-          }),
-        );
-      }
-      const bob = newPeer("bob");
-      const alice = newPeer("alice");
+        if (debug) {
+          bob.on("debug", (info)=>{
+            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+          })
+          alice.on("debug", (info)=>{
+            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+          })
+        }
 
-      if (debug) {
-        bob.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        bob.on("error", console.error)
+        alice.on("error", console.error)
+        const wg = waitGroup(()=>{
+          bob.broadcast({"type": "message", "data":"hello"})
+        }, 2)
+        alice.on("peer.accept", (p)=>{
+          console.log("alice peer.accept", p.handle)
+          wg()
         })
-        alice.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        bob.once("peer.accept", (p)=>{
+          console.log("bob peer.accept", p.handle)
+          wg()
         })
-      }
-
-      bob.on("error", console.error)
-      alice.on("error", console.error)
-      const wg = waitGroup(()=>{
-        bob.broadcast({"type": "message", "data":"hello"})
-      }, 2)
-      alice.on("peer.accept", (p)=>{
-        console.log("alice peer.accept", p.handle)
-        wg()
-      })
-      bob.once("peer.accept", (p)=>{
-        console.log("bob peer.accept", p.handle)
-        wg()
-      })
-      alice.once("message", (m)=>{
-        console.log("alice message", m)
-        assert.equal(m.data, "hello")
-        bob.disconnect();
-        alice.disconnect();
-        done();
-      })
-      bob.connect()
-      alice.connect()
+        alice.once("message", (m)=>{
+          console.log("alice message", m)
+          assert.equal(m.data, "hello")
+          bob.disconnect();
+          alice.disconnect();
+          done();
+        })
+        bob.connect()
+        alice.connect()
+      })();
     });
     it('should demo all events', function (done) {
       const port = sport++;
       const debug = false;
       const codec = Codec.MsgPack;
       const srv = TcpTestServer({port, binary: codec.binary})
-      srv.on("listening", ()=>{
-        function newPeer(handle){
+      srv.on("listening", async ()=>{
+
+        async function newPeer(handle){
+          const crypter = Crypters.NoCrypto
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
-              opts: {AnnounceTimeout: 1, AnnounceInterval: 300},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new TcpTransport({port, addr, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
         if(debug){
           bob.on("debug", (info)=>{
@@ -509,77 +594,96 @@ describe('Whisper', function () {
     it('should timeout', function (done) {
       const debug = false;
       this.timeout(5000);
-      const tr = new ArrayTransportProvider(100)
+      const tr = new ArrayTransportProvider(100);
+      ( async ()=>{
+        async function newPeer(handle){
+          const crypter = Crypters.NoCrypto
+          const keys = await crypter.create()
+          const shared = await crypter.create()
+          return new Peer(
+            new Whisper({
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:tr.endPoint()
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
+              opts: {AnnounceTimeout: 1},
+            }),
+          );
+        }
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
 
-      function newPeer(handle){
-        return new Peer(
-          tr.endPoint().connect(),
-          new Whisper({
-            crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-            me: {handle: handle,},
-            opts: {AnnounceTimeout: 1},
-          }),
-        );
-      }
-      const bob = newPeer("bob");
-      const alice = newPeer("alice");
+        if(debug){
+          bob.on("debug", (info)=>{
+            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+          })
+          alice.on("debug", (info)=>{
+            console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+          })
+        }
 
-      if(debug){
-        bob.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        bob.on("error", console.error)
+        alice.on("error", console.error)
+        var wg = waitGroup(()=>{
+          alice.disconnect()
+          bob.once("peer.leave", (p)=>{
+            console.log("bob peer.leave", p)
+            bob.disconnect();
+            done();
+          })
+        },2)
+        alice.on("peer.accept", (p)=>{
+          console.log("alice peer.accept", p.handle)
+          wg()
         })
-        alice.on("debug", (info)=>{
-          console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
+        bob.once("peer.accept", (p)=>{
+          console.log("bob peer.accept", p.handle)
+          wg()
         })
-      }
-
-      bob.on("error", console.error)
-      alice.on("error", console.error)
-      var wg = waitGroup(()=>{
-        alice.disconnect()
-        bob.once("peer.leave", (p)=>{
-          console.log("bob peer.leave", p)
-          bob.disconnect();
-          done();
-        })
-      },2)
-      alice.on("peer.accept", (p)=>{
-        console.log("alice peer.accept", p.handle)
-        wg()
-      })
-      bob.once("peer.accept", (p)=>{
-        console.log("bob peer.accept", p.handle)
-        wg()
-      })
-      bob.connect()
-      alice.connect()
+        bob.connect()
+        alice.connect()
+      })();
     });
   });
   describe('#bad acting', function () {
     it('should ignore invalid announce message', function (done) {
       this.timeout(5000);
-      const debug = false;
+      const debug = !true;
       const port = sport++;
       const codec = Codec.Json;
       const srv = TcpTestServer({port, binary: codec.binary})
-      srv.on("listening", ()=>{
+      srv.on("listening", async ()=>{
 
-        function newPeer(handle){
+        async function newPeer(handle){
+          const crypter = Crypters.NoCrypto
+          const keys = await crypter.create()
+          const shared = await crypter.create()
           return new Peer(
-            new TcpTransport({port, addr, codec}),
             new Whisper({
-              crypter: Crypters.NoCrypto, roomID: "room id", roomPwd: "room pwd",
-              me: {handle: handle,},
-              opts: {AnnounceTimeout: 2, AnnounceInterval: 500},
+              transport: new CryptoTransport({
+                crypter:crypter, keys:keys, shared:shared,
+                transport:new TcpTransport({port, addr, codec})
+              }),
+              roomID: "room id",
+              roomPwd: "room pwd",
+              handle: handle,
+              keys:keys,
+              shared:shared,
+              opts: {AnnounceTimeout: 200, AnnounceInterval: 1000, LoginRetry:1},
             }),
           );
         }
-        const bob = newPeer("bob");
-        const alice = newPeer("alice");
-        const peter = newPeer("peter");
+        const bob = await newPeer("bob");
+        const alice = await newPeer("alice");
+        const peter = await newPeer("peter");
 
         if (debug) {
-          bob.on("debug", (info)=>{
+          peter.on("debug", (info)=>{
             console.log(`${info.handle} ${info.dir} ${info.type} ${JSON.stringify(info.data)}`)
           })
           alice.on("debug", (info)=>{
@@ -594,8 +698,9 @@ describe('Whisper', function () {
           console.log("alice bad acting")
           // alice is bad acting,
           // she slips trhough the peter's announce message.
-          peter.whisper.me.keys = await peter.whisper.crypter.create()
-          const msg = await peter.whisper._announcePkt();
+          // peter.whisper.me.keys = await peter.whisper.transport._crypter.create()
+          var msg = await peter.whisper._announcePkt();
+          msg.sign = await peter.whisper.transport._crypter.sign(msg.data)
           var wg = waitGroup(()=>{
             bob.disconnect()
             alice.disconnect()
@@ -615,7 +720,7 @@ describe('Whisper', function () {
             console.log("bob peer accept", peer)
             wg()
           })
-          alice.transport.send(msg)
+          alice.whisper.transport._transport.send(msg)
           console.log("peter connect", peter.whisper.publicKey())
           peter.connect()
         }, 2)
