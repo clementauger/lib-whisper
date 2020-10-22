@@ -1,5 +1,5 @@
 const EventEmitter = require('events');
-const { Crypters, SumHash } = require("./crypto.js")
+const { SumHash } = require("./crypto.js")
 const { CryptoTransport } = require("./cryptotransport.js")
 
 var MsgType = MsgType || {};
@@ -248,7 +248,7 @@ class Whisper {
       this.msgDispatcher.emit(cleardata.type, cleardata, msg);
       return
     }
-    const peer = this.peers.filter(isPubKey(msg.from)).shift();
+    const peer = this.peers.filter(isPubKey(msg.from)).slice(0).shift();
     if (peer) {
       this.trigger(cleardata.type, cleardata, peer);
     }
@@ -327,9 +327,9 @@ class Whisper {
       }
       isNew = true
     }
-    this.announces[from].publicKey = msg.publicKey;
-    this.announces[from].date = msg.date;
-    this.announces[from].hash = msg.data;
+    // this.announces[from].publicKey = msg.publicKey;
+    // this.announces[from].date = msg.date;
+    // this.announces[from].hash = msg.data;
     this.announces[from].lastSeen = new Date();
     if (!isNew && !isBefore(this.announces[from].lastLogin, this.opts.LoginRetry)) {
       return
@@ -463,6 +463,13 @@ class Whisper {
       this.issueLoginResponse(data.from, cleardata.token, ChResults.InvalidHash)
       return
     }
+    const announce = this.announces[data.from];
+    if (!this.announces[data.from]){
+      this.announces[data.from]={
+        lastSeen: new Date(),
+        lastLogin: new Date(),
+      }
+    }
     this.issueSendInfo(data.from, cleardata.token);
 	}
 
@@ -514,7 +521,7 @@ class Whisper {
 	peerAddUpdate(cleardata, data) {
     const bPub = this.publicKey();
     var isNew = false;
-    var peer = this.peers.filter( isPubKey(data.from) ).shift()
+    var peer = this.peers.filter( isPubKey(data.from) ).slice(0).shift()
     if (!peer){
       isNew = true;
       peer = {
@@ -523,7 +530,7 @@ class Whisper {
       }
     }
     const conflictPeerHandle = this.peers.filter( notPubKey(peer.publicKey) )
-      .filter( isHandle(peer.handle) ).shift();
+      .filter( isHandle(peer.handle) ).slice(0).shift();
 
     if (conflictPeerHandle) {
       this.issueInvalidPeerHandle(peer, cleardata.mytoken, {handle:peer.handle})
@@ -624,6 +631,7 @@ class Whisper {
 	// broadcast, encrypt and authenticate a message using a sharedKey.
 	async broadcast (msg) {
     this._debug({handle: this.me.handle, type: "message", dir: "snd", data: msg})
+    this.transport._handle = this.me.handle;
     return this.transport.broadcast(msg);
 	}
 
@@ -780,5 +788,5 @@ function sortBySince(a, b) {
 }
 
 module.exports = {
-  Whisper, ChResults, EvType, MsgType, WhisperOpts, Crypters, SumHash
+  Whisper, ChResults, EvType, MsgType, WhisperOpts, SumHash
 }

@@ -2,8 +2,9 @@
 
 // const util = require('util')
 const { fromStream } = require('streaming-iterables')
-const {PassThrough} = require('stream')
+const { PassThrough } = require('stream')
 
+const util = require('util');
 const EventEmitter = require('events');
 const Codec = require("./codec")
 const { Err } = require('./errors');
@@ -30,7 +31,7 @@ const Websockets = require('libp2p-websockets')
 const CID = require('cids')
 const multihashing = require('multihashing-async')
 const stringToCID = async (t)=> {
-  const bytes = new TextEncoder('utf8').encode(t)
+  const bytes = new util.TextEncoder('utf8').encode(t)
   const hash = await multihashing(bytes, 'sha2-256')
   return new CID(1, 'dag-pb', hash)
 }
@@ -167,34 +168,7 @@ class LibP2PTransport {
     this.libp2p.handle(protocol,  async (z) => {
       const stream = z.stream
       const peerID = z.connection.remotePeer.toB58String();
-
-      const d = new PassThrough()
-      that.encoder.pipe(d)
-      pipe(fromStream(d), lp.encode(), stream)
-
-      const decoder = that.codec.decoder();
-      decoder.on("error", console.error);
-      decoder.on("data", (data)=>{
-        that.trigger(EvType.Message, data);
-      })
-      that.trigger("peer")
-      await pipe(stream.source, lp.decode(),
-         async function (source) {
-           for await (const msg of source) {
-             if (that.codec.binary) {
-               decoder.write(msg.slice())
-               continue
-             }
-             decoder.write(msg.toString())
-           }
-         }
-       ).catch((err)=>{
-         console.error("handle err:", err)
-       })
-       stream.close()
-       decoder.end()
-       that.encoder.unpipe(d)
-       d.destroy()
+      this._handleOuputStream(peerID, stream)
     })
     this.libp2p.peerStore.on('peer', this._onPeer)
 
@@ -216,14 +190,19 @@ class LibP2PTransport {
   };
 
   async _onPeer (peerID) {
+    const sPeerID = peerID.toB58String()
     const res = await this.libp2p.dialProtocol(peerID, this.protocol).catch((err)=>{
       // console.error("dial err:",err)
     })
     if (!res) {
       return
     }
-    const stream = res.stream;
+    this._handleInputStream(sPeerID, res.stream)
+  }
+
+  async _handleInputStream (peerID, stream) {
     var that = this;
+
     const decoder = this.codec.decoder();
     decoder.on("error", console.error);
     decoder.on("data", (data)=>{
@@ -242,8 +221,22 @@ class LibP2PTransport {
     ).catch((err)=>{
       console.error("_onPeer err:", err)
     });
-    stream.close()
     decoder.end()
+    stream.close()
+  }
+
+  async _handleOuputStream (peerID, stream) {
+    var that = this;
+
+    that.trigger("peer");
+
+    const d = new PassThrough()
+    that.encoder.pipe(d);
+    await pipe(fromStream(d), lp.encode(), stream)
+
+    this.encoder.unpipe(d)
+    d.destroy()
+    stream.close()
   }
 
   async addDHTAnnounce (announce) {

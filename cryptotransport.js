@@ -1,11 +1,15 @@
-const { Crypters, SumHash, Nonce } = require("./crypto.js")
+const { SumHash, Nonce } = require("./crypto.js")
 const EventEmitter = require('events');
+const { NoCrypto } = require("./crypto/nocrypto")
+// const { Nacl } = require("./crypto/nacl")
+// const { Pgp } = require("./crypto/pgp")
+// const { SaltShaker } = require("./crypto/saltshaker")
 
 class CryptoTransport {
 
   constructor({
     transport=null,
-    crypter=Crypters.NoCrypto,
+    crypter=NoCrypto,
     keys={publicKey: null, privateKey: null},
     shared={publicKey: null, privateKey: null},
   }) {
@@ -144,7 +148,7 @@ class CryptoTransport {
 
 	// broadcast, encrypt and authenticate a message using a sharedKey.
 	async broadcast (msg) {
-    const oldest = this._sharedKeys.sort(sortBySince).pop();
+    const oldest = this._sharedKeys.sort(sortBySince).slice(0,1).shift();
     if (!oldest) {
       console.error(this.me.handle, "could not find a peer to send message")
       return

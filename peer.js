@@ -65,6 +65,11 @@ class Peer {
     return this.whisper.changeHandle.apply(this.whisper, args);
   }
 
+  // get peer handle.
+  handle () {
+     return this.whisper.me.handle;
+  }
+
 }
 
 module.exports = { Peer }

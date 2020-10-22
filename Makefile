@@ -1,4 +1,8 @@
-FILES=whisper.js crypto/{nacl,pgp,nocrypto,saltshaker}.js transport/{codec,array,libp2p,ws}.js
+FILES=whisper.js crypto/{nacl,pgp,nocrypto,saltshaker}.js transport/{codec,libp2p,ws}.js
+NACLWS=whisper.js crypto/{nacl,nocrypto,saltshaker}.js transport/{codec,ws}.js
+PGPWS=whisper.js crypto/{pgp,nocrypto}.js transport/{codec,ws}.js
+NACLLIBP2P=whisper.js crypto/{nacl,nocrypto,saltshaker}.js transport/{codec,libp2p}.js
+PGPLIBP2P=whisper.js crypto/{pgp,nocrypto}.js transport/{codec,libp2p}.js
 
 test:
 	npm run test
@@ -9,15 +13,48 @@ build:
 ls:
 	ls -hlG whisper.${npm_package_version}.*
 
-# $(eval SIZE=$(shell zip -qr - whisper.${npm_package_version}.dev.min.js | wc -c))
-# $(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
-# @echo "whisper.${npm_package_version}.dev.min.js => ${SIZE}kb"
+	@echo ""
 
-	$(eval SIZE=$(shell zip -qr - whisper.${npm_package_version}.min.js | wc -c))
+	$(eval FILE="whisper.${npm_package_version}.min.js")
+	$(eval SIZE=$(shell cat ${FILE} | wc -c))
+	$(eval ZSIZE=$(shell zip -qr - ${FILE} | wc -c))
 	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
-	@echo "whisper.${npm_package_version}.min.js => ${SIZE}kb"
+	$(eval ZSIZE=$(shell units -t "${ZSIZE}bytes" "kilobyte"))
+	@echo "$(FILE) => ${SIZE}kb => ${ZSIZE}kb zipped"
+
+	$(eval FILE="whisper-naclws.${npm_package_version}.min.js")
+	$(eval SIZE=$(shell cat ${FILE} | wc -c))
+	$(eval ZSIZE=$(shell zip -qr - ${FILE} | wc -c))
+	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
+	$(eval ZSIZE=$(shell units -t "${ZSIZE}bytes" "kilobyte"))
+	@echo "$(FILE) => ${SIZE}kb => ${ZSIZE}kb zipped"
+
+	$(eval FILE="whisper-pgpws.${npm_package_version}.min.js")
+	$(eval SIZE=$(shell cat ${FILE} | wc -c))
+	$(eval ZSIZE=$(shell zip -qr - ${FILE} | wc -c))
+	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
+	$(eval ZSIZE=$(shell units -t "${ZSIZE}bytes" "kilobyte"))
+	@echo "$(FILE) => ${SIZE}kb => ${ZSIZE}kb zipped"
+
+	$(eval FILE="whisper-nacllibp2p.${npm_package_version}.min.js")
+	$(eval SIZE=$(shell cat ${FILE} | wc -c))
+	$(eval ZSIZE=$(shell zip -qr - ${FILE} | wc -c))
+	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
+	$(eval ZSIZE=$(shell units -t "${ZSIZE}bytes" "kilobyte"))
+	@echo "$(FILE) => ${SIZE}kb => ${ZSIZE}kb zipped"
+
+	$(eval FILE="whisper-pgplibp2p.${npm_package_version}.min.js")
+	$(eval SIZE=$(shell cat ${FILE} | wc -c))
+	$(eval ZSIZE=$(shell zip -qr - ${FILE} | wc -c))
+	$(eval SIZE=$(shell units -t "${SIZE}bytes" "kilobyte"))
+	$(eval ZSIZE=$(shell units -t "${ZSIZE}bytes" "kilobyte"))
+	@echo "$(FILE) => ${SIZE}kb => ${ZSIZE}kb zipped"
 
 min:
 	browserify -p tinyify ${FILES} -o whisper.${npm_package_version}.min.js
+	browserify -p tinyify ${NACLWS} -o whisper-naclws.${npm_package_version}.min.js
+	browserify -p tinyify ${PGPWS} -o whisper-pgpws.${npm_package_version}.min.js
+	browserify -p tinyify ${NACLLIBP2P} -o whisper-nacllibp2p.${npm_package_version}.min.js
+	browserify -p tinyify ${PGPLIBP2P} -o whisper-pgplibp2p.${npm_package_version}.min.js
 dev-min:
 	browserify -d -p tinyify ${FILES} -o whisper.${npm_package_version}.dev.min.js

@@ -2,10 +2,14 @@ const { ArrayTransportProvider } = require("./transport/array")
 const { LibP2PTransport } = require("./transport/libp2p")
 const { TcpTransport, TcpTestServer } = require("./transport/tcp")
 const { WsTransport, WsTestServer } = require("./transport/ws")
-const { Whisper, MsgType, Crypters, SumHash } = require("./whisper")
+const { Whisper, MsgType, SumHash } = require("./whisper")
 const { Peer } = require("./peer")
 const { CryptoTransport } = require("./cryptotransport")
 const Codec = require("./transport/codec");
+const { NoCrypto } = require("./crypto/nocrypto")
+const { Nacl } = require("./crypto/nacl")
+const { Pgp } = require("./crypto/pgp")
+const { SaltShaker } = require("./crypto/saltshaker")
 
 function waitGroup(done, n) {
   var i = 0;
@@ -34,7 +38,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.Nacl
+          const crypter = Nacl
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -89,7 +93,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.Nacl
+          const crypter = Nacl
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -144,7 +148,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.SaltShaker
+          const crypter = SaltShaker
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -200,7 +204,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.Pgp
+          const crypter = Pgp
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -255,7 +259,7 @@ describe('Whisper', function () {
 
       (async () => {
         async function newPeer(handle){
-          const crypter = Crypters.Pgp
+          const crypter = Pgp
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -311,7 +315,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.NoCrypto
+          const crypter = NoCrypto
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -370,7 +374,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.NoCrypto
+          const crypter = NoCrypto
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -425,7 +429,7 @@ describe('Whisper', function () {
       const debug = false;
       ( async ()=>{
         async function newPeer(handle){
-          const crypter = Crypters.NoCrypto
+          const crypter = NoCrypto
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -486,7 +490,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.NoCrypto
+          const crypter = NoCrypto
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -597,7 +601,7 @@ describe('Whisper', function () {
       const tr = new ArrayTransportProvider(100);
       ( async ()=>{
         async function newPeer(handle){
-          const crypter = Crypters.NoCrypto
+          const crypter = NoCrypto
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(
@@ -660,7 +664,7 @@ describe('Whisper', function () {
       srv.on("listening", async ()=>{
 
         async function newPeer(handle){
-          const crypter = Crypters.NoCrypto
+          const crypter = NoCrypto
           const keys = await crypter.create()
           const shared = await crypter.create()
           return new Peer(

@@ -3,7 +3,7 @@ const ndjson = require('ndjson')
 var msgpack = require('msgpack5')()
 
 const Json = {
-  encode: JSON.stringify,
+  encode: (d)=>{return JSON.stringify(d)+"\n"},
   decode: JSON.parse,
   encoder: ndjson.stringify,
   decoder: ndjson.parse,

@@ -5,17 +5,21 @@
 const process = require('process');
 
 const { LibP2PTransport } = require("./transport/libp2p")
-const { Whisper, Crypters } = require("./whisper")
+const { Whisper } = require("./whisper")
 const { Peer } = require("./peer")
 const { CryptoTransport } = require("./cryptotransport")
 const Codec = require("./transport/codec");
+const { NoCrypto } = require("./crypto/nocrypto")
+// const { Nacl } = require("./crypto/nacl")
+// const { Pgp } = require("./crypto/pgp")
+// const { SaltShaker } = require("./crypto/saltshaker")
 
 function waitGroup(done, n) {
   var i = 0;
   var ret = function(){
     i++;
     if (i === n) {
-      done();
+      setTimeout(done,0);
     }
   }
   return ret
@@ -44,9 +48,8 @@ var port = 10000;
 
 ( async () => {
 
-
   async function newPeer(handle){
-    const crypter = Crypters.NoCrypto
+    const crypter = NoCrypto
     const keys = await crypter.create()
     const shared = await crypter.create()
     return new Peer(
@@ -71,38 +74,42 @@ var port = 10000;
 
   const bob = await newPeer("bob");
   const alice = await newPeer("alice");
+  const peter = await newPeer("peter");
+  const tim = await newPeer("tim");
 
-  bob.on("peer.accept", (peer) => { console.log("bob accept peer", peer)})
-  alice.on("peer.accept", (peer) => { console.log("alice accept peer", peer)})
-
-  bob.on("message", (m, p)=>{ console.log("bob rcv:", m, "from", p.handle); })
-  alice.on("message", (m, p)=>{ console.log("alice rcv:", m, "from", p.handle); })
+  const peers = [ bob, alice, peter, tim ]
 
   const wg = waitGroup(()=>{
     bob.broadcast({type:"message", data :"hi"})
     alice.broadcast({type:"message", data :"yo"})
-  }, 2)
-  bob.on("peer.accept", wg)
-  alice.on("peer.accept", wg)
+    peter.broadcast({type:"message", data :"hola"})
+  }, 12)
 
   const wg2 = waitGroup(()=>{
     console.log("done, disconnecting...")
     setTimeout(async () => {
-      await bob.disconnect()
-      await alice.disconnect()
+      peers.map(async (p)=>{
+        await p.disconnect()
+      })
       console.log("disconnected! bye!")
 
       // it takes long time to close.
       // the dht has ongoing requests that prevents the process to exit asap.
-      process.exit(0);
+      // process.exit(0);
       // setInterval(async () => {
       //   wtf.dump()
       //   console.log("")
       // }, 1000)
     }, 1000)
-  }, 2)
-  bob.on("message", wg2)
-  alice.on("message", wg2);
+  }, 9)
+
+  peers.map((p)=>{
+    p.on("peer.accept", wg)
+    p.on("message", wg2)
+    p.on("message", (m, peer)=>{ console.log(p.handle(), "rcv:", m, "from", peer.handle); })
+    p.on("peer.accept", (peer) => { console.log(p.handle(), "peer.accept", peer)})
+    p.on("peer.leave", (peer) => { console.log(p.handle(), "peer.leave", peer.handle)})
+  })
 
   if (withDHT && !withMDNS && !wanDHT) {
     // This is needed to bootstrap the dht when mdns is false and wanDHT is false too.
@@ -112,15 +119,31 @@ var port = 10000;
     const wg3 = waitGroup(()=>{
       bob.transport.libp2p
         .peerStore.addressBook.set(alice.transport.libp2p.peerId, alice.transport.libp2p.multiaddrs)
+      bob.transport.libp2p
+        .peerStore.addressBook.set(peter.transport.libp2p.peerId, peter.transport.libp2p.multiaddrs)
+      bob.transport.libp2p
+        .peerStore.addressBook.set(tim.transport.libp2p.peerId, tim.transport.libp2p.multiaddrs)
       alice.transport.libp2p
         .peerStore.addressBook.set(bob.transport.libp2p.peerId, bob.transport.libp2p.multiaddrs)
-    }, 2)
-    bob.on("connect", wg3);
-    alice.on("connect", wg3);
+      alice.transport.libp2p
+        .peerStore.addressBook.set(peter.transport.libp2p.peerId, peter.transport.libp2p.multiaddrs)
+      alice.transport.libp2p
+        .peerStore.addressBook.set(tim.transport.libp2p.peerId, tim.transport.libp2p.multiaddrs)
+      peter.transport.libp2p
+        .peerStore.addressBook.set(alice.transport.libp2p.peerId, alice.transport.libp2p.multiaddrs)
+      peter.transport.libp2p
+        .peerStore.addressBook.set(bob.transport.libp2p.peerId, bob.transport.libp2p.multiaddrs)
+      peter.transport.libp2p
+        .peerStore.addressBook.set(tim.transport.libp2p.peerId, tim.transport.libp2p.multiaddrs)
+    }, 4)
+    peers.map((p)=>{
+      p.on("connect", wg3)
+    })
   }
 
-  await bob.connect()
+  peers.map((p)=>{
+    p.connect()
+  })
   // console.log(bob.transport.libp2p.multiaddrs[0].toString())
   // console.log(bob.transport.libp2p.transportManager.getAddrs())
-  alice.connect()
 })();
