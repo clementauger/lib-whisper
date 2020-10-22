@@ -1,7 +1,6 @@
-const { ArrayTransportProvider } = require("./transport/array")
 const { TcpTransport, TcpTestServer } = require("./transport/tcp")
-const { WsTransport, WsTestServer } = require("./transport/ws")
-const { Whisper, WhisperOpts } = require("./whisper")
+// const { WsTransport, WsTestServer } = require("./transport/ws")
+const { Whisper } = require("./whisper")
 const { Peer } = require("./peer")
 const { CryptoTransport } = require("./cryptotransport")
 const Codec = require("./transport/codec");
